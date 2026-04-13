@@ -1,0 +1,55 @@
+import { api } from "../api";
+
+export const authApi = api.injectEndpoints({
+  endpoints: (builder) => ({
+    googleLogin: builder.mutation<any, any>({
+      query: (credentials) => ({
+        url: '/api/auth/google-signin',
+        method: 'POST',
+        body: credentials,
+      }),
+    }),
+    linkedinLogin: builder.mutation<any, any>({
+      query: (credentials) => ({
+        url: '/api/auth/linkedin-signin',
+        method: 'POST',
+        body: credentials,
+      }),
+    }),
+    mobileContact: builder.mutation<any, { mobileNumber: string }>({
+      query: (body) => ({
+        url: '/api/auth/contact',
+        method: 'POST',
+        body,
+      }),
+    }),
+    verifyUser: builder.mutation<any, { mobileNumber: string }>({
+      query: (body) => ({
+        url: '/api/auth/verify_User',
+        method: 'POST',
+        body,
+      }),
+    }),
+    registerUser: builder.mutation<any, { userId: string; data: FormData }>({
+      query: ({ userId, data }) => ({
+        url: `/api/auth/register/${userId}/add_user`,
+        method: 'POST',
+        body: data,
+      }),
+    }),
+    getProfile: builder.query<any, string>({
+      query: (id) => `/api/users/${id}/get_user`,
+      providesTags: ['User'],
+    }),
+  }),
+  overrideExisting: false,
+});
+
+export const {
+  useGoogleLoginMutation,
+  useLinkedinLoginMutation,
+  useMobileContactMutation,
+  useVerifyUserMutation,
+  useRegisterUserMutation,
+  useGetProfileQuery,
+} = authApi;
