@@ -12,6 +12,6 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ['User', 'Post', 'Partner', 'Message'],
+  tagTypes: ['User', 'Post', 'Partner', 'Message', 'Notifications'],
   endpoints: () => ({}), // Empty endpoints object to be populated by injectEndpoints
 });

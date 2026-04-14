@@ -1,6 +1,7 @@
 "use client";
 import { useAddPostMutation } from "@/store/endpoints/posts";
-import { useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
 import {
   ChevronDown,
   Image as ImageIcon,
@@ -15,6 +16,7 @@ import { ImageWithFallback } from "./figma/ImageWithFallback";
 
 export function CreatePost() {
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
   const [addPost, { isLoading }] = useAddPostMutation();
   
   const [content, setContent] = useState("");
@@ -47,7 +49,7 @@ export function CreatePost() {
 
   const handleSubmit = async () => {
     if (!isAuthenticated) {
-      toast.error("Please login to share a post.");
+      dispatch(openAuthModal());
       return;
     }
     if (!content.trim() && !file) {
@@ -101,6 +103,7 @@ export function CreatePost() {
           placeholder="What's on your mind regarding affiliate marketing?"
           value={content}
           onChange={(e) => setContent(e.target.value)}
+          onClick={() => !isAuthenticated && dispatch(openAuthModal())}
           className="flex-1 w-full min-h-[44px] max-h-[200px] bg-[#F5F5F5] border border-[#E0E0E0] rounded-[10px] px-4 py-2 text-[14px] text-[#3C3C3C] focus:outline-none focus:ring-1 focus:ring-[#0A7EA4] placeholder:text-[#757575] resize-none"
         />
       </div>

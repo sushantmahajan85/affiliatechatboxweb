@@ -4,12 +4,20 @@ import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import { PartnersSidebar } from "./partners-sidebar";
 import { MessagingOverlay } from "./messaging-overlay";
+import { AuthModal } from "./auth-modal";
 import { useState } from "react";
+import { useAppSelector } from "@/store/hooks";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPartnersOpen, setIsPartnersOpen] = useState(false);
   const [activeChats, setActiveChats] = useState<any[]>([]);
+
+  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const isLinkedInVerified = user?.isLinkedinVerified || false;
+
+  // Chat is hidden for Guests and users who are NOT LinkedIn verified
+  const showChat = isAuthenticated && isLinkedInVerified;
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] font-sans text-[#1A1A2E] overflow-hidden">
@@ -40,10 +48,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
           />
 
           {/* Messaging Windows & Bar - Floating outside sidebar clipping */}
-          <MessagingOverlay 
-            activeChats={activeChats} 
-            setActiveChats={setActiveChats} 
-          />
+          {showChat && (
+            <MessagingOverlay 
+              activeChats={activeChats} 
+              setActiveChats={setActiveChats} 
+            />
+          )}
+
+          <AuthModal />
 
           {/* Mobile Overlays */}
           {isSidebarOpen && (

@@ -11,11 +11,22 @@ interface HeaderProps {
   onPartnersClick?: () => void;
 }
 
-const NOTIFICATIONS = [
-  { id: 1, title: "New Partner Connection", description: "Tech Solutions sent you a connect request", time: "2m ago", read: false },
-  { id: 2, title: "System Update", description: "Version 2.4.0 is now live with new features", time: "1h ago", read: true },
-  { id: 3, title: "Security Alert", description: "New login detected from a new device", time: "5h ago", read: true },
-];
+import {
+  useGetNotificationsQuery,
+  useGetUnreadStatusQuery,
+  useMarkAllReadMutation
+} from "@/store/endpoints/notifications";
+
+function formatRelativeTime(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return "just now";
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  return `${Math.floor(diffInSeconds / 86400)}d ago`;
+}
 
 const RECENT_MESSAGES = [
   { id: 1, name: "Sarah Miller", message: "Hey Alex, are we still on for the meeting?", time: "5m ago", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop" },
@@ -23,8 +34,8 @@ const RECENT_MESSAGES = [
   { id: 3, name: "Jessica Alba", message: "Can you review the latest designs?", time: "2h ago", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop" },
 ];
 
-import { useGetProfileQuery } from "@/store/endpoints/auth";
-import { useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
 
 export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -34,6 +45,19 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   const router = useRouter();
   
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
+
+  const { data: notificationsData } = useGetNotificationsQuery(user?._id || "", {
+    skip: !isAuthenticated || !user?._id,
+  });
+  const { data: unreadData } = useGetUnreadStatusQuery(user?._id || "", {
+    skip: !isAuthenticated || !user?._id,
+    pollingInterval: 30000, // Poll for unread status every 30s
+  });
+  const [markAllRead] = useMarkAllReadMutation();
+
+  const notifications = notificationsData?.notifs || [];
+  const hasUnread = unreadData?.hasUnreadNotifications || false;
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -79,7 +103,9 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
               className={`relative p-1.5 rounded-full transition-all duration-200 ${showNotifications ? 'bg-[#F0ECF9] text-[#7B61FF]' : 'text-[#757575] hover:bg-[#F5F5F5]'}`}
             >
               <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+              {hasUnread && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+              )}
             </button>
             <AnimatePresence>
               {showNotifications && (
@@ -91,22 +117,36 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
                 >
                   <div className="p-4 border-b border-[#F0F0F0] flex items-center justify-between">
                     <h3 className="font-bold text-[#1A1A2E]">Notifications</h3>
-                    <button className="text-xs text-[#7B61FF] font-medium hover:underline">Mark all read</button>
+                    {hasUnread && (
+                      <button 
+                        onClick={() => markAllRead(user?._id || "")}
+                        className="text-xs text-[#7B61FF] font-medium hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
                   </div>
                   <div className="max-h-80 overflow-y-auto scrollbar-hide">
-                    {NOTIFICATIONS.map(notif => (
-                      <div 
-                        key={notif.id} 
-                        onClick={() => { router.push('/notifications'); setShowNotifications(false); }}
-                        className={`p-4 hover:bg-[#F9F9F9] transition-colors cursor-pointer border-b border-[#F0F0F0] last:border-0 ${!notif.read ? 'bg-[#F0ECF9]/30' : ''}`}
-                      >
-                        <div className="flex justify-between items-start mb-1">
-                          <p className="text-sm font-bold text-[#1A1A2E]">{notif.title}</p>
-                          <span className="text-[10px] text-[#9E9E9E]">{notif.time}</span>
+                    {notifications.length > 0 ? (
+                      notifications.slice(0, 10).map(notif => (
+                        <div 
+                          key={notif._id} 
+                          onClick={() => { router.push('/notifications'); setShowNotifications(false); }}
+                          className={`p-4 hover:bg-[#F9F9F9] transition-colors cursor-pointer border-b border-[#F0F0F0] last:border-0 ${!notif.isRead ? 'bg-[#F0ECF9]/30' : ''}`}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <p className="text-sm font-bold text-[#1A1A2E]">{notif.title}</p>
+                            <span className="text-[10px] text-[#9E9E9E]">{formatRelativeTime(notif.timestamp)}</span>
+                          </div>
+                          <p className="text-xs text-[#757575] line-clamp-2">{notif.message}</p>
                         </div>
-                        <p className="text-xs text-[#757575] line-clamp-2">{notif.description}</p>
+                      ))
+                    ) : (
+                      <div className="p-8 text-center bg-white">
+                        <Bell className="w-8 h-8 text-[#E2E8F0] mx-auto mb-2 opacity-50" />
+                        <p className="text-xs text-[#94A3B8] font-bold">No notifications yet</p>
                       </div>
-                    ))}
+                    )}
                   </div>
                   <div className="p-3 bg-[#F9F9F9] text-center border-t border-[#F0F0F0]">
                     <button 
@@ -223,7 +263,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
           </div>
         ) : (
           <button 
-            onClick={() => router.push('/login')}
+            onClick={() => dispatch(openAuthModal())}
             className="px-4 h-9 bg-[#1A1A2E] text-white rounded-full text-sm font-bold hover:bg-[#2A2A3E] transition-all active:scale-95 shadow-md"
           >
             Sign In

@@ -18,7 +18,8 @@ import {
   usePinPostMutation,
   useUnpinPostMutation
 } from "@/store/endpoints/posts";
-import { useAppSelector } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
@@ -44,6 +45,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   const [limit, setLimit] = useState(10);
   const observerTarget = useRef(null);
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  const dispatch = useAppDispatch();
 
   // Queries
   const allPostsQuery = useGetAllPostsQuery(limit, { skip: activeTab !== "all" });
@@ -206,7 +208,10 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                       <DropdownMenuItem className="cursor-pointer">
                         View Profile
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer">
+                      <DropdownMenuItem 
+                        onClick={(e) => { e.stopPropagation(); !isAuthenticated && dispatch(openAuthModal()); }}
+                        className="cursor-pointer"
+                      >
                         Report Post
                       </DropdownMenuItem>
                       {canManagePin && (
@@ -238,7 +243,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
 
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
                 <button 
-                  onClick={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => { e.stopPropagation(); !isAuthenticated && dispatch(openAuthModal()); }}
                   className="flex-1 flex items-center justify-center gap-2 h-9 bg-[#0A7EA4] border border-[#0A7EA4] rounded-lg text-white text-[12px] font-medium hover:bg-[#086a8a] transition-colors shadow-sm"
                 >
                   <MessageCircle className="w-4 h-4 text-white" />

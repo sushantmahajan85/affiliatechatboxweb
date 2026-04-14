@@ -1,19 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { setCredentials } from "@/store/authSlice";
+import {
+  useGoogleLoginMutation,
+  useLinkedinLoginMutation
+} from "@/store/endpoints/auth";
+import { useAppDispatch } from "@/store/hooks";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useAppDispatch } from "@/store/hooks";
-import { setCredentials } from "@/store/authSlice";
-import { 
-  useGoogleLoginMutation, 
-  useLinkedinLoginMutation, 
-  useMobileContactMutation, 
-  useVerifyUserMutation,
-  useRegisterUserMutation 
-} from "@/store/endpoints/auth";
+import { useEffect, useRef, useState } from "react";
 import bgImage from "../../../public/assets/authBG.jpg";
 
 // SVG Icons for Google and LinkedIn
@@ -33,12 +30,11 @@ const LinkedInIcon = () => (
 );
 
 import { useGoogleLogin } from "@react-oauth/google";
-import { jwtDecode } from "jwt-decode";
 
 export function AuthPage() {
   const [step, setStep] = useState<"login" | "otp">("login");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [mobileNumber, setMobileNumber] = useState("");
+  const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   
   const dispatch = useAppDispatch();
@@ -46,10 +42,7 @@ export function AuthPage() {
   
   const [googleLogin, { isLoading: isGoogleLoading }] = useGoogleLoginMutation();
   const [linkedinLogin, { isLoading: isLinkedinLoading }] = useLinkedinLoginMutation();
-  const [mobileContact, { isLoading: isContactLoading }] = useMobileContactMutation();
-  const [verifyUser, { isLoading: isVerifyLoading }] = useVerifyUserMutation();
-
-  const isLoading = isGoogleLoading || isLinkedinLoading || isContactLoading || isVerifyLoading;
+  const isLoading = isGoogleLoading || isLinkedinLoading;
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Real Google Login Implementation
@@ -82,34 +75,13 @@ export function AuthPage() {
     onError: () => setError("Google Sign-In popup closed or failed"),
   });
 
-  const handleLinkedinLogin = async () => {
+  const handleLinkedinLogin = () => {
     try {
       setError(null);
-      // For a real LinkedIn integration, we would redirect to LinkedIn OAuth page
-      // Here is the standard URL construction:
-      const clientId = process.env.NEXT_PUBLIC_LINKEDIN_CLIENT_ID || "86ocw59vpvhl39";
-      const redirectUri = typeof window !== 'undefined' ? `${window.location.origin}/login` : "";
-      const state = Math.random().toString(36).substring(7);
-      
-      const linkedinUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&scope=openid%20profile%20email`;
-      
-      window.location.href = linkedinUrl;
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || "https://online-media-tools-server-vercel.vercel.app";
+      window.location.href = `${backendUrl}/auth/linkedin?t=${Date.now()}`;
     } catch (err: any) {
       setError("Failed to initiate LinkedIn login");
-    }
-  };
-
-  const handleMobileLogin = async () => {
-    if (!mobileNumber) {
-      setError("Please enter your mobile number");
-      return;
-    }
-    try {
-      setError(null);
-      await mobileContact({ mobileNumber }).unwrap();
-      setStep("otp");
-    } catch (err: any) {
-      setError(err?.data?.message || "Failed to send code");
     }
   };
 
@@ -129,53 +101,16 @@ export function AuthPage() {
     }
   };
 
-  const handleVerify = async () => {
-    try {
-      setError(null);
-      const response = await verifyUser({ mobileNumber }).unwrap();
-      dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
-      router.push("/");
-    } catch (err: any) {
-      setError(err?.data?.message || "Invalid code or verification failed");
-    }
-  };
-
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const linkedinCode = searchParams?.get("code");
 
   useEffect(() => {
-    const handleLinkedinCallback = async (code: string) => {
-      try {
-        setError(null);
-        // Step 1: In a production app, the frontend sends the code to the backend
-        // Step 2: The backend exchanges the code for an access token and user info
-        // Based on your backend, it expects email, firstName, etc.
-        // Usually, the backend should do the fetching from LinkedIn API
-        // But for now, let's trigger the mutation.
-        
-        // Since your backend linkedin-signin expects full user info in the body:
-        // We might need to handle this exchange on the backend or frontend.
-        // Assuming backend handles the exchange or we fetch here.
-        
-        // MOCK/TEMP until backend is fully automated for code exchange:
-        const response = await linkedinLogin({ 
-          email: "syncing...", 
-          firstName: "LinkedIn", 
-          linkedInUserID: "Syncing",
-          linkedInAccessToken: code 
-        }).unwrap();
-        
-        dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
-        router.push("/");
-      } catch (err: any) {
-        setError("LinkedIn sync failed. Backend might need code exchange implementation.");
-      }
-    };
-
     if (linkedinCode) {
-      handleLinkedinCallback(linkedinCode);
+      // The logic has moved to the backend + AuthModal sync. 
+      // If the user landed here with a code from an old flow, we just clear it.
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [linkedinCode, linkedinLogin, dispatch, router]);
+  }, [linkedinCode, dispatch, router]);
 
   return (
     <div className="min-h-screen relative flex overflow-hidden">
@@ -224,24 +159,24 @@ export function AuthPage() {
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6 bg-white/5 backdrop-blur-sm md:bg-transparent">
-          <div className="w-full max-w-[460px]">
+          <div className="w-full max-w-[500px] px-4">
             <AnimatePresence mode="wait">
               {step === "login" ? (
                 <motion.div
                   key="login"
-                  initial={{ opacity: 0, scale: 0.9, x: 50 }}
+                  initial={{ opacity: 0, scale: 0.9, x: -50 }}
                   animate={{ opacity: 1, scale: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, x: -50 }}
+                  exit={{ opacity: 0, scale: 0.9, x: 50 }}
                   transition={{ type: "spring", duration: 0.6, bounce: 0.2 }}
-                  className="w-full bg-white rounded-[32px] p-10 md:p-12 shadow-[0_32px_80px_rgba(0,0,0,0.3)] border border-white"
+                  className="w-full bg-white rounded-[32px] p-10 md:p-12 shadow-[0_32px_80px_rgba(0,0,0,0.3)] border border-white relative"
                 >
                   <div className="text-center mb-10">
-                    <h2 className="text-[28px] font-black text-[#1A1A1A] tracking-tight">Welcome Back</h2>
-                    <p className="text-[#64748B] font-bold mt-2">Sign in to access your dashboard</p>
+                    <h2 className="text-[32px] font-black text-[#1A1A1A] tracking-tight">Access Community</h2>
+                    <p className="text-[#64748B] font-bold mt-2">Sign in to interact with professionals</p>
                   </div>
 
                   {error && (
-                    <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center gap-3 text-red-600 text-sm font-bold">
+                    <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-xl flex items-center gap-3 text-red-600 text-sm font-bold">
                       <AlertCircle className="w-5 h-5" />
                       {error}
                     </div>
@@ -251,21 +186,19 @@ export function AuthPage() {
                     <button
                       onClick={() => handleGoogleLogin()}
                       disabled={isLoading}
-                      className="w-full h-[64px] bg-white border-2 border-[#E2E8F0] rounded-[20px] flex items-center justify-center gap-4 text-[16px] font-black text-[#1A1A1A] hover:bg-[#F8FAFC] hover:border-[#0A7EA4] transition-all active:scale-[0.98] disabled:opacity-50 group"
+                      className="w-full h-[64px] bg-white border-2 border-[#E2E8F0] rounded-[20px] flex items-center justify-center gap-4 text-[16px] font-black text-[#1A1A1A] hover:bg-[#F8FAFC] hover:border-[#0A7EA4] transition-all active:scale-[0.98] disabled:opacity-50"
                     >
                       <GoogleIcon />
                       <span>Continue with Google</span>
-                      <ChevronRight className="w-5 h-5 text-[#94A3B8] opacity-0 group-hover:opacity-100 transition-all -ml-2 group-hover:ml-0" />
                     </button>
 
                     <button
                       onClick={handleLinkedinLogin}
                       disabled={isLoading}
-                      className="w-full h-[64px] bg-[#0A7EA4] rounded-[20px] flex items-center justify-center gap-4 text-[16px] font-black text-white hover:bg-[#086a8a] transition-all active:scale-[0.98] shadow-[0_8px_24px_rgba(10,126,164,0.3)] disabled:opacity-50 group"
+                      className="w-full h-[64px] bg-[#0A66C2] rounded-[20px] flex items-center justify-center gap-4 text-[16px] font-black text-white hover:bg-[#085aae] transition-all active:scale-[0.98] disabled:opacity-50 shadow-md"
                     >
                       <LinkedInIcon />
                       <span>Continue with LinkedIn</span>
-                      <ChevronRight className="w-5 h-5 text-white/50 opacity-0 group-hover:opacity-100 transition-all -ml-2 group-hover:ml-0" />
                     </button>
 
                     <div className="relative py-6">
@@ -273,26 +206,16 @@ export function AuthPage() {
                         <div className="w-full border-t border-[#E2E8F0]"></div>
                       </div>
                       <div className="relative flex justify-center text-[12px] uppercase tracking-[0.3em] font-black text-[#94A3B8]">
-                        <span className="bg-white px-6">OR MOBILE</span>
+                        <span className="bg-white px-6">OR EXPLORE</span>
                       </div>
                     </div>
 
                     <div className="space-y-4">
-                      <div className="relative">
-                        <input 
-                          type="tel"
-                          placeholder="Enter Mobile Number"
-                          value={mobileNumber}
-                          onChange={(e) => setMobileNumber(e.target.value)}
-                          className="w-full h-[64px] px-6 bg-[#F8FAFC] border-2 border-[#E2E8F0] rounded-[20px] text-[16px] font-bold focus:border-[#0A7EA4] outline-none transition-all"
-                        />
-                      </div>
                       <button
-                        onClick={handleMobileLogin}
-                        disabled={isLoading || !mobileNumber}
-                        className="w-full h-[64px] bg-[#1A1A2E] rounded-[20px] flex items-center justify-center gap-3 text-[16px] font-black text-white hover:bg-[#2A2A3E] transition-all active:scale-[0.98] disabled:opacity-50"
+                        onClick={() => router.push("/")}
+                        className="w-full h-[64px] bg-[#1A1A2E] rounded-[20px] flex items-center justify-center gap-3 text-[16px] font-black text-white hover:bg-[#2A2A3E] transition-all active:scale-[0.98]"
                       >
-                        <span>Continue with Mobile</span>
+                        <span>Continue as Guest</span>
                         <ChevronRight className="w-5 h-5" />
                       </button>
                     </div>
@@ -322,8 +245,8 @@ export function AuthPage() {
                   </button>
 
                   <div className="text-center mb-10">
-                    <h2 className="text-[28px] font-black text-[#1A1A1A]">Verify Account</h2>
-                    <p className="text-[#64748B] font-bold mt-2">Enter the code sent to {mobileNumber}</p>
+                    <h2 className="text-[28px] font-black text-[#1A1A1A]">Verify Email</h2>
+                    <p className="text-[#64748B] font-bold mt-2">Enter the verification code sent to your email</p>
                   </div>
 
                   {error && (
@@ -344,27 +267,19 @@ export function AuthPage() {
                         value={digit}
                         onChange={(e) => handleOtpChange(index, e.target.value)}
                         onKeyDown={(e) => handleKeyDown(index, e)}
-                        className="w-full h-[68px] text-center text-[24px] font-black border-2 border-[#E2E8F0] rounded-[18px] focus:border-[#0A7EA4] focus:ring-8 focus:ring-[#0A7EA4]/5 outline-none transition-all"
+                        className="w-full h-[64px] text-center text-[20px] font-black border-2 border-[#E2E8F0] rounded-[12px] focus:border-[#0A7EA4] outline-none transition-all"
                       />
                     ))}
                   </div>
 
                   <button
-                    onClick={handleVerify}
-                    disabled={isLoading || otp.some(d => !d)}
-                    className="w-full h-[64px] bg-[#1A1A2E] rounded-[20px] flex items-center justify-center gap-3 text-[16px] font-black text-white hover:bg-[#2A2A3E] transition-all active:scale-[0.98] shadow-[0_8px_24px_rgba(26,26,46,0.3)] disabled:opacity-50"
+                    className="w-full h-[64px] bg-[#1A1A2E] rounded-[20px] text-white font-black hover:bg-[#2A2A3E] transition-all shadow-[0_8px_24px_rgba(26,26,46,0.2)]"
                   >
-                    {isLoading ? (
-                      <div className="w-7 h-7 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <span>Complete Verification</span>
-                    )}
+                    Confirm Verification
                   </button>
 
                   <div className="mt-10 text-center">
                     <button 
-                      onClick={handleMobileLogin}
-                      disabled={isLoading}
                       className="text-[14px] text-[#64748B] font-bold hover:text-[#0A7EA4] transition-colors"
                     >
                       Didn't get the code? <span className="text-[#1A1A1A] ml-1">Resend now</span>
