@@ -183,11 +183,10 @@ export function PostDetailsPage() {
               {post.postMediaType?.startsWith("video/") ? (
                 <video src={post.postMediaUrl} controls className="max-w-full max-h-[600px]" />
               ) : (
-                <ImageWithFallback 
-                  src={post.postMediaUrl} 
-                  alt="Post media" 
-                  className="max-w-full max-h-[600px] object-contain" 
-                  fallbackSrc="/assets/placeholder-post.jpg"
+                <ImageWithFallback
+                  src={post.postMediaUrl}
+                  alt="Post media"
+                  className="max-w-full max-h-[600px] object-contain"
                 />
               )}
             </div>
