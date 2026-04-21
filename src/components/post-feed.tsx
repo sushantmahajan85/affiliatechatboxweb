@@ -20,8 +20,9 @@ import {
 } from "@/store/endpoints/posts";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
+import { openChat } from "@/store/chatSlice";
 import { formatDistanceToNow } from "date-fns";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { toast } from "sonner";
@@ -57,7 +58,16 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   const [unpinPost] = useUnpinPostMutation();
 
   const currentQuery = activeTab === "all" ? allPostsQuery : myPostsQuery;
-  const posts = currentQuery.data?.posts || [];
+  const rawPosts = currentQuery.data?.posts || [];
+  
+  const posts = useMemo(() => {
+    if (activeTab === "all") {
+        return rawPosts.filter((p: any) => p.isApproved === true);
+    }
+    // For 'my' tab, we show everything from the user query
+    return rawPosts;
+  }, [rawPosts, activeTab]);
+
   const isLoading = currentQuery.isLoading;
   const error = currentQuery.error;
 
@@ -252,7 +262,14 @@ export function PostFeed({ activeTab }: PostFeedProps) {
 
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
                 <button 
-                  onClick={(e) => { e.stopPropagation(); !isAuthenticated && dispatch(openAuthModal()); }}
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    if (!isAuthenticated) {
+                      dispatch(openAuthModal());
+                      return;
+                    }
+                    router.push(`/chats?userId=${post.userId}`);
+                  }}
                   className="flex-1 flex items-center justify-center gap-2 h-9 bg-[#0A7EA4] border border-[#0A7EA4] rounded-lg text-white text-[12px] font-medium hover:bg-[#086a8a] transition-colors shadow-sm"
                 >
                   <MessageCircle className="w-4 h-4 text-white" />

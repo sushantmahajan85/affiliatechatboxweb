@@ -33,6 +33,26 @@ export const chatsApi = api.injectEndpoints({
         method: 'POST',
         body,
       }),
+      async onQueryStarted({ message, receiverId, senderId }, { dispatch, queryFulfilled }) {
+        // Optimistic Update for Chat History
+        const patchResult = dispatch(
+          chatsApi.util.updateQueryData('getChatHistory', { userId1: senderId, userId2: receiverId }, (draft) => {
+            draft.history.push({
+              _id: `temp-${Date.now()}`,
+              senderId,
+              receiverId,
+              message,
+              timestamp: new Date().toISOString(),
+              isRead: false
+            });
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
       invalidatesTags: ['ChatHistory', 'Conversations'],
     }),
     getChatHistory: builder.query<{ history: ChatMessage[] }, { userId1: string; userId2: string }>({

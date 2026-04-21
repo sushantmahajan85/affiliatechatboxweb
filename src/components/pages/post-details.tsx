@@ -4,6 +4,10 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, MessageCircle, Flag, MoreVertical, Share2 } from "lucide-react";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { clsx } from "clsx";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
+import { openChat } from "@/store/chatSlice";
+import { toast } from "sonner";
 
 // Mock data (in a real app, this would be fetched based on id)
 const POSTS = [
@@ -71,6 +75,8 @@ const getFlagEmoji = (countryCode: string) => {
 export function PostDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { isAuthenticated } = useAppSelector((state) => state.auth);
   const { data, isLoading, error } = useGetPostByIdQuery(id as string);
 
   if (isLoading) {
@@ -212,7 +218,16 @@ export function PostDetailsPage() {
 
         {/* Footer Actions */}
         <div className="pt-6 border-t border-[#F3F4F6] flex flex-col sm:flex-row gap-3">
-          <button className="flex-1 flex items-center justify-center gap-2 h-11 bg-[#0A7EA4] text-white rounded-xl text-[15px] font-bold hover:bg-[#086a8a] transition-colors shadow-sm">
+          <button 
+            onClick={() => {
+              if (!isAuthenticated) {
+                dispatch(openAuthModal());
+                return;
+              }
+              router.push(`/chats?userId=${post.userId}`);
+            }}
+            className="flex-1 flex items-center justify-center gap-2 h-11 bg-[#0A7EA4] text-white rounded-xl text-[15px] font-bold hover:bg-[#086a8a] transition-colors shadow-sm"
+          >
             <MessageCircle className="w-5 h-5" />
             <span>Start Chat</span>
           </button>

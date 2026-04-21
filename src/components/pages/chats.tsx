@@ -119,6 +119,38 @@ export function ChatsPage() {
     pollingInterval: 3000 // Poll every 3 seconds
   });
 
+  // Request Gate Logic (MOVED UP to avoid 'used before declaration' error)
+  const { isSenderPending, isRecipientPending } = useMemo(() => {
+    if (!selectedChatId || !currentUserId || !notificationsData?.notifs) {
+        return { isSenderPending: false, isRecipientPending: false };
+    }
+
+    // Is there an unread request FROM me TO them?
+    const sentRequest = notificationsData.notifs.find(n => 
+        String(n.senderId) === String(currentUserId) && 
+        String(n.receiverId) === String(selectedChatId) && 
+        n.type === "chat_request" && 
+        !n.isRead
+    );
+
+    // Is there an unread request FROM them TO me?
+    const receivedRequest = notificationsData.notifs.find(n => 
+        String(n.senderId) === String(selectedChatId) && 
+        String(n.receiverId) === String(currentUserId) && 
+        n.type === "chat_request" && 
+        !n.isRead
+    );
+
+    // Logic refinement: Has the message recipient ever replied?
+    const hasMeReplied = historyData?.history?.some(m => String(m.senderId) === String(currentUserId));
+    const hasPartnerReplied = historyData?.history?.some(m => String(m.senderId) === String(selectedChatId));
+
+    return {
+        isSenderPending: sentRequest && !hasPartnerReplied, // Block A until B replies
+        isRecipientPending: receivedRequest && !hasMeReplied // Show banner to B until B replies
+    };
+  }, [selectedChatId, currentUserId, notificationsData, historyData]);
+
   // Sound and Mark-as-read logic
   useEffect(() => {
     const unread = notificationsData?.notifs?.filter(n => n.type === "chat_request" && !n.isRead);
@@ -131,19 +163,19 @@ export function ChatsPage() {
       audio.play().catch(e => console.log("Sound play blocked by browser. Interaction required."));
       setLastNotifId(newest._id);
       
-      // 2. If it's the currently selected chat, mark it as read immediately
-      if (selectedChatId && newest.senderId === String(selectedChatId)) {
+      // 2. If it's the currently selected chat and NOT a pending request, mark it as read immediately
+      if (selectedChatId && newest.senderId === String(selectedChatId) && !isRecipientPending) {
           markAsRead({ userId: currentUserId || "", partnerId: String(selectedChatId) });
       }
     }
-  }, [notificationsData, selectedChatId, currentUserId, lastNotifId, markAsRead]);
+  }, [notificationsData, selectedChatId, currentUserId, lastNotifId, markAsRead, isRecipientPending]);
 
-  // Mark as read when manually selecting a chat
+  // Mark as read when manually selecting a chat (only if it's already an active/accepted chat)
   useEffect(() => {
-    if (selectedChatId && currentUserId) {
+    if (selectedChatId && currentUserId && !isRecipientPending) {
         markAsRead({ userId: currentUserId, partnerId: String(selectedChatId) });
     }
-  }, [selectedChatId, currentUserId, markAsRead]);
+  }, [selectedChatId, currentUserId, markAsRead, isRecipientPending]);
 
   // Unified list of all conversation partners
   const allConversations = useMemo(() => {
@@ -187,11 +219,14 @@ export function ChatsPage() {
             !n.isRead
         );
         
-        // Only consider it a 'Pending Request' if there's no reply yet
-        const hasHistory = historyData?.history?.some(m => String(m.senderId) === String(c.id));
-        const isPending = !!sentRequest && !hasHistory;
+        // Only consider it a 'Pending Request' if I haven't replied to them yet (or vice versa)
+        const hasMeReplied = historyData?.history?.some(m => String(m.senderId) === String(currentUserId) && String(m.receiverId) === String(c.id));
+        const hasPartnerReplied = historyData?.history?.some(m => String(m.senderId) === String(c.id) && String(m.receiverId) === String(currentUserId));
+        
+        const isIncomingPending = isUnread && !hasMeReplied;
+        const isOutgoingPending = !!sentRequest && !hasPartnerReplied;
 
-        return isUnread || isPending;
+        return isIncomingPending || isOutgoingPending;
     });
   }, [allConversations, notificationsData, currentUserId, historyData]);
 
@@ -214,36 +249,6 @@ export function ChatsPage() {
     );
   }, [activeTab, searchQuery, realConversations, realRequests]);
 
-  // Request Gate Logic
-  const { isSenderPending, isRecipientPending } = useMemo(() => {
-    if (!selectedChatId || !currentUserId || !notificationsData?.notifs) {
-        return { isSenderPending: false, isRecipientPending: false };
-    }
-
-    // Is there an unread request FROM me TO them?
-    const sentRequest = notificationsData.notifs.find(n => 
-        String(n.senderId) === String(currentUserId) && 
-        String(n.receiverId) === String(selectedChatId) && 
-        n.type === "chat_request" && 
-        !n.isRead
-    );
-
-    // Is there an unread request FROM them TO me?
-    const receivedRequest = notificationsData.notifs.find(n => 
-        String(n.senderId) === String(selectedChatId) && 
-        String(n.receiverId) === String(currentUserId) && 
-        n.type === "chat_request" && 
-        !n.isRead
-    );
-
-    // Only block if there's no actual chat history yet
-    const hasHistory = historyData?.history && historyData.history.length > 0;
-
-    return {
-        isSenderPending: sentRequest && !hasHistory,
-        isRecipientPending: receivedRequest && !hasHistory
-    };
-  }, [selectedChatId, currentUserId, notificationsData, historyData]);
 
   const requestCount = realRequests.length;
 

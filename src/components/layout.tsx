@@ -11,7 +11,8 @@ import { useAppSelector } from "@/store/hooks";
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPartnersOpen, setIsPartnersOpen] = useState(false);
-  const [activeChats, setActiveChats] = useState<any[]>([]);
+  
+  const activeChats = useAppSelector((state) => state.chat.activeChats);
 
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
   const isLinkedInVerified = user?.isLinkedinVerified || false;
@@ -43,16 +44,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <PartnersSidebar 
             isOpen={isPartnersOpen} 
             onClose={() => setIsPartnersOpen(false)} 
-            activeChats={activeChats}
-            setActiveChats={setActiveChats}
           />
 
           {/* Messaging Windows & Bar - Floating outside sidebar clipping */}
           {showChat && (
-            <MessagingOverlay 
-              activeChats={activeChats} 
-              setActiveChats={setActiveChats} 
-            />
+            <MessagingOverlay />
           )}
 
           <AuthModal />
