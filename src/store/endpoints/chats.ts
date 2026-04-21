@@ -1,0 +1,63 @@
+import { api } from "../api";
+
+export interface SendMessageRequest {
+  message: string;
+  receiverId: string;
+  senderId: string;
+}
+
+export interface ChatMessage {
+  _id: string;
+  senderId: string;
+  receiverId: string;
+  message: string;
+  timestamp: string;
+  isRead: boolean;
+}
+
+export interface ChatPartner {
+  id: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
+  time: string | null;
+  unreadCount: number;
+  online: boolean;
+}
+
+export const chatsApi = api.injectEndpoints({
+  endpoints: (builder) => ({
+    sendChatMessage: builder.mutation<void, SendMessageRequest>({
+      query: (body) => ({
+        url: '/api/chat/send',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['ChatHistory', 'Conversations'],
+    }),
+    getChatHistory: builder.query<{ history: ChatMessage[] }, { userId1: string; userId2: string }>({
+      query: ({ userId1, userId2 }) => `/api/chat/history/${userId1}/${userId2}`,
+      providesTags: ['ChatHistory'],
+    }),
+    getConversations: builder.query<{ conversations: ChatPartner[] }, string>({
+      query: (userId) => `/api/chat/conversations/${userId}`,
+      providesTags: ['Conversations'],
+    }),
+    markChatAsRead: builder.mutation<void, { userId: string; partnerId: string }>({
+      query: (body) => ({
+        url: '/api/chat/mark-read',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Conversations', 'Notifications' as any],
+    }),
+  }),
+  overrideExisting: false,
+});
+
+export const {
+  useSendChatMessageMutation,
+  useGetChatHistoryQuery,
+  useGetConversationsQuery,
+  useMarkChatAsReadMutation,
+} = chatsApi;

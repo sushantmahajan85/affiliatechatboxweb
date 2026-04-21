@@ -106,8 +106,6 @@ export function AuthPage() {
 
   useEffect(() => {
     if (linkedinCode) {
-      // The logic has moved to the backend + AuthModal sync. 
-      // If the user landed here with a code from an old flow, we just clear it.
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [linkedinCode, dispatch, router]);

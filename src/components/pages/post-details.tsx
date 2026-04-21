@@ -126,7 +126,10 @@ export function PostDetailsPage() {
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full overflow-hidden border border-[#E0E0E0]">
+            <div 
+              className="w-14 h-14 rounded-full overflow-hidden border border-[#E0E0E0] cursor-pointer"
+              onClick={() => router.push(`/profile/${post.userId}`)}
+            >
               <ImageWithFallback 
                 src={post.profileImageUrl || `https://ui-avatars.com/api/?name=${post.userName}&background=0A7EA4&color=fff`} 
                 alt={post.userName} 
@@ -134,8 +137,11 @@ export function PostDetailsPage() {
               />
             </div>
             <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="text-[18px] font-bold text-[#1A1A2E]">{post.userName}</span>
+              <div 
+                className="flex items-center gap-2 cursor-pointer group/name"
+                onClick={() => router.push(`/profile/${post.userId}`)}
+              >
+                <span className="text-[18px] font-bold text-[#1A1A2E] group-hover/name:text-[#0A7EA4] transition-colors">{post.userName}</span>
                 <div className="flex items-center gap-1.5 min-w-0">
                     {post.isGoogleVerified && (
                       <div className="w-4 h-4 rounded-full flex items-center justify-center" title="Google Verified">
@@ -187,7 +193,7 @@ export function PostDetailsPage() {
                   src={post.postMediaUrl} 
                   alt="Post media" 
                   className="max-w-full max-h-[600px] object-contain" 
-                  fallbackSrc="/assets/placeholder-post.jpg"
+                
                 />
               )}
             </div>

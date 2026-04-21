@@ -130,7 +130,10 @@ export function DirectoryPage() {
               key={member.id} 
               className="bg-white rounded-[14px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col items-center text-center hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all group border border-transparent hover:border-[#F0F7F9]"
             >
-              <div className="relative mb-4">
+              <div 
+                className="relative mb-4 cursor-pointer"
+                onClick={() => router.push(`/profile/${member.id}`)}
+              >
                 <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white ring-2 ring-[#F3F4F6] group-hover:ring-[#0A7EA4]/20 transition-all">
                   <ImageWithFallback src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
                 </div>
@@ -139,8 +142,8 @@ export function DirectoryPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 mb-1">
-                <h3 className="text-[16px] font-bold text-[#1A1A2E] line-clamp-1">{member.name}</h3>
+              <div className="flex items-center gap-1.5 mb-1 cursor-pointer" onClick={() => router.push(`/profile/${member.id}`)}>
+                <h3 className="text-[16px] font-bold text-[#1A1A2E] line-clamp-1 hover:text-[#0A7EA4] transition-colors">{member.name}</h3>
                 <div className="flex items-center gap-1">
                   {member.isGoogleVerified && (
                     <div className="w-4 h-4 rounded-full flex items-center justify-center shadow-sm" title="Google Verified">

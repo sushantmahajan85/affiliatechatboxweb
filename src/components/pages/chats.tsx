@@ -1,12 +1,17 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { useGetProfileQuery } from "@/store/endpoints/auth";
+import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation, useSendChatMessageMutation } from "@/store/endpoints/chats";
+import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
+import { useAppSelector } from "@/store/hooks";
 import { clsx } from "clsx";
+import { format } from "date-fns";
 import {
   ArrowLeft,
   CheckCheck,
   MoreVertical,
-  Paperclip,
   Phone,
+  Plus,
   Search,
   Send,
   Smile,
@@ -14,116 +19,275 @@ import {
   Video
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
-const CHATS_MOCK = [
-  {
-    id: 1,
-    name: "Alex Johnson",
-    avatar: "https://images.unsplash.com/photo-1584800526920-35d8a0409deb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBwb3J0cmFpdCUyMG1hbiUyMHdvbWFuJTIwaGVhZHNob3QlMjBhdmF0YXJ8ZW58MXx8fHwxNzc0NjAzOTMxfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    lastMessage: "I'll check the ROI and get back to you by tomorrow afternoon.",
-    time: "10:45 AM",
-    unreadCount: 0,
-    online: true,
-    tab: "messages"
-  },
-  {
-    id: 2,
-    name: "Sarah Miller",
-    avatar: "https://images.unsplash.com/photo-1675186914580-94356f7c012c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWlsaW5nJTIwYnVzaW5lc3MlMjB3b21hbiUyMHBvcnRyYWl0JTIwYXZhdGFyfGVufDF8fHx8MTc3NDYwMzkzNHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    lastMessage: "The high-ticket SaaS offers are looking very promising right now.",
-    time: "9:20 AM",
-    unreadCount: 3,
-    online: false,
-    tab: "messages"
-  },
-  {
-    id: 3,
-    name: "James Wilson",
-    avatar: "https://images.unsplash.com/photo-1628157588553-5eeea00af15c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx5b3VuZyUyMGVudHJlcHJlbmV1ciUyMG1hbiUyMHBvcnRyYWl0JTIwYXZhdGFyfGVufDF8fHx8MTc3NDYwMzkzNnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    lastMessage: "Thanks for the quality traffic sources. Let's discuss further.",
-    time: "Yesterday",
-    unreadCount: 0,
-    online: true,
-    tab: "messages"
-  },
-  {
-    id: 4,
-    name: "Marketing Lead",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?q=80&w=250&h=250&auto=format&fit=crop",
-    lastMessage: "Interested in your affiliate program for SaaS tools.",
-    time: "2:15 PM",
-    unreadCount: 1,
-    online: false,
-    tab: "requests"
-  },
-  {
-    id: 5,
-    name: "E-commerce Partner",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=250&h=250&auto=format&fit=crop",
-    lastMessage: "Hello! I saw your post about selling traffic.",
-    time: "11:00 AM",
-    unreadCount: 1,
-    online: true,
-    tab: "requests"
-  }
-];
+// No mock data - purely backend driven
+const CHATS_MOCK: any[] = [];
 
-const MESSAGE_HISTORY = {
-  1: [
-    { id: 1, text: "Hey Alex! How's the ROI looking on the new campaign?", sender: "me", time: "10:30 AM" },
-    { id: 2, text: "It's improving. We're seeing about 15% increase since Monday.", sender: "them", time: "10:35 AM" },
-    { id: 3, text: "That's great news. Any specific channels performing better?", sender: "me", time: "10:40 AM" },
-    { id: 4, text: "I'll check the ROI and get back to you by tomorrow afternoon.", sender: "them", time: "10:45 AM" },
-  ]
-};
+interface Message {
+  id: string | number;
+  text: string;
+  sender: "me" | "them";
+  time: string;
+}
 
 export function ChatsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
+  const { userId: currentUserId } = useAppSelector((state) => state.auth);
+  
   const [activeTab, setActiveTab] = useState<"messages" | "requests">("messages");
-  const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
+  const [selectedChatId, setSelectedChatId] = useState<string | number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [messageInput, setMessageInput] = useState("");
+  const [lastNotifId, setLastNotifId] = useState<string | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sendMessage, { isLoading: isSending }] = useSendChatMessageMutation();
+  const [markAsRead] = useMarkChatAsReadMutation();
+  const { data: convData, isLoading: isConvLoading } = useGetConversationsQuery(currentUserId || "", {
+    skip: !currentUserId,
+    pollingInterval: 3000 // Poll every 3 seconds
+  });
+
+  // Fetch real history for selected chat with 3s polling
+  const { data: historyData } = useGetChatHistoryQuery({
+    userId1: currentUserId || "",
+    userId2: String(selectedChatId)
+  }, {
+    skip: !currentUserId || !selectedChatId,
+    pollingInterval: 3000 // Poll every 3 seconds for real-time history
+  });
+
+  // Fallback profile fetching for when we click from a profile page
+  // (The user might not be in our conversation list yet)
+  const isRealMongoId = typeof selectedChatId === "string" && selectedChatId.length > 10;
+  const { data: profileData } = useGetProfileQuery(selectedChatId as string, {
+    skip: !isRealMongoId || !!convData?.conversations?.find(c => c.id === selectedChatId)
+  });
 
   // Handle incoming userId from navigation
   useEffect(() => {
     const userId = searchParams?.get("userId");
     if (userId) {
-      const id = parseInt(userId);
+      // Don't parseInt if it looks like a Mongo ID
+      const id = (userId.length > 10) ? userId : parseInt(userId);
       setSelectedChatId(id);
-      
-      // If it's a known chat, make sure the correct tab is active
-      const chat = CHATS_MOCK.find(c => c.id === id);
-      if (chat) {
-        setActiveTab(chat.tab as "messages" | "requests");
-      }
     }
   }, [searchParams]);
 
   // Combined data to handle chats not in the mock list
-  const selectedChat = CHATS_MOCK.find(c => c.id === selectedChatId) || 
-    (selectedChatId ? {
+  const selectedChat = useMemo(() => {
+    if (!selectedChatId) return null;
+    
+    // 1. Check if it's already in our active conversations list
+    const existing = convData?.conversations?.find(c => String(c.id) === String(selectedChatId));
+    if (existing) return existing;
+
+    // 2. If it's a real user from profileData, use that
+    if (profileData?.user) {
+        const u = profileData.user;
+        return {
+            id: u._id,
+            name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+            avatar: u.profileImageUrl || `https://ui-avatars.com/api/?name=${u.firstName || "U"}&background=0A7EA4&color=fff`,
+            online: true,
+            lastMessage: "",
+            time: "Now",
+            unreadCount: 0,
+            tab: "messages"
+        };
+    }
+
+    // 3. Fallback placeholder
+    return {
       id: selectedChatId,
-      name: `User #${selectedChatId}`, // Fallback name
-      avatar: "https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=250",
+      name: `User`,
+      avatar: `https://ui-avatars.com/api/?name=U&background=0A7EA4&color=fff`,
       online: true,
       lastMessage: "",
       time: "Now",
       unreadCount: 0,
       tab: "messages"
-    } : null);
-  const filteredChats = CHATS_MOCK.filter(chat => 
-    chat.tab === activeTab && 
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+    };
+  }, [selectedChatId, convData, profileData]);
 
-  const requestCount = CHATS_MOCK.filter(c => c.tab === "requests").length;
+  const { data: notificationsData, isLoading: isNotisLoading } = useGetNotificationsQuery(currentUserId || "", {
+    skip: !currentUserId,
+    pollingInterval: 3000 // Poll every 3 seconds
+  });
+
+  // Sound and Mark-as-read logic
+  useEffect(() => {
+    const unread = notificationsData?.notifs?.filter(n => n.type === "chat_request" && !n.isRead);
+    if (!unread || unread.length === 0) return;
+
+    const newest = unread[0];
+    if (newest._id !== lastNotifId) {
+      // 1. Play premium notification sound
+      const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
+      audio.play().catch(e => console.log("Sound play blocked by browser. Interaction required."));
+      setLastNotifId(newest._id);
+      
+      // 2. If it's the currently selected chat, mark it as read immediately
+      if (selectedChatId && newest.senderId === String(selectedChatId)) {
+          markAsRead({ userId: currentUserId || "", partnerId: String(selectedChatId) });
+      }
+    }
+  }, [notificationsData, selectedChatId, currentUserId, lastNotifId, markAsRead]);
+
+  // Mark as read when manually selecting a chat
+  useEffect(() => {
+    if (selectedChatId && currentUserId) {
+        markAsRead({ userId: currentUserId, partnerId: String(selectedChatId) });
+    }
+  }, [selectedChatId, currentUserId, markAsRead]);
+
+  // Unified list of all conversation partners
+  const allConversations = useMemo(() => {
+    if (!convData?.conversations) return [];
+    
+    // Map existing conversations and check for unread notifications for each
+    return convData.conversations.map(c => {
+        const unreadNotifs = notificationsData?.notifs?.filter(n => 
+            n.senderId === c.id && n.type === "chat_request" && !n.isRead
+        ) || [];
+        
+        // Smart time formatting
+        let displayTime = "";
+        if (c.time) {
+            const date = new Date(c.time);
+            const isToday = new Date().toDateString() === date.toDateString();
+            displayTime = isToday ? format(date, "p") : format(date, "MMM d");
+        }
+
+        return {
+            ...c,
+            time: displayTime,
+            unreadCount: unreadNotifs.length,
+            tab: "messages"
+        };
+    });
+  }, [convData, notificationsData]);
+
+  // Requests include:
+  // 1. Incoming unread messages/requests (unreadCount > 0)
+  // 2. Outgoing pending requests (we sent but they haven't accepted/replied)
+  const realRequests = useMemo(() => {
+    return allConversations.filter(c => {
+        const isUnread = c.unreadCount > 0;
+        
+        // Find if I have a pending OUTGOING request to this person
+        const sentRequest = notificationsData?.notifs?.find(n => 
+            String(n.senderId) === String(currentUserId) && 
+            String(n.receiverId) === String(c.id) && 
+            n.type === "chat_request" && 
+            !n.isRead
+        );
+        
+        // Only consider it a 'Pending Request' if there's no reply yet
+        const hasHistory = historyData?.history?.some(m => String(m.senderId) === String(c.id));
+        const isPending = !!sentRequest && !hasHistory;
+
+        return isUnread || isPending;
+    });
+  }, [allConversations, notificationsData, currentUserId, historyData]);
+
+  const realConversations = useMemo(() => {
+      // Mutually Exclusive: Messages tab should NOT include Requests
+      const requestIds = new Set(realRequests.map(r => String(r.id)));
+      return allConversations.filter(c => !requestIds.has(String(c.id)));
+  }, [allConversations, realRequests]);
+
+  const filteredChats = useMemo(() => {
+    // If we're on requests tab, show only the real requests
+    if (activeTab === "requests") {
+      return realRequests.filter(chat => 
+        chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    return realConversations.filter(chat => 
+      chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [activeTab, searchQuery, realConversations, realRequests]);
+
+  // Request Gate Logic
+  const { isSenderPending, isRecipientPending } = useMemo(() => {
+    if (!selectedChatId || !currentUserId || !notificationsData?.notifs) {
+        return { isSenderPending: false, isRecipientPending: false };
+    }
+
+    // Is there an unread request FROM me TO them?
+    const sentRequest = notificationsData.notifs.find(n => 
+        String(n.senderId) === String(currentUserId) && 
+        String(n.receiverId) === String(selectedChatId) && 
+        n.type === "chat_request" && 
+        !n.isRead
+    );
+
+    // Is there an unread request FROM them TO me?
+    const receivedRequest = notificationsData.notifs.find(n => 
+        String(n.senderId) === String(selectedChatId) && 
+        String(n.receiverId) === String(currentUserId) && 
+        n.type === "chat_request" && 
+        !n.isRead
+    );
+
+    // Only block if there's no actual chat history yet
+    const hasHistory = historyData?.history && historyData.history.length > 0;
+
+    return {
+        isSenderPending: sentRequest && !hasHistory,
+        isRecipientPending: receivedRequest && !hasHistory
+    };
+  }, [selectedChatId, currentUserId, notificationsData, historyData]);
+
+  const requestCount = realRequests.length;
+
+  // Real history from backend
+  const currentMessages = useMemo(() => {
+    if (!historyData?.history) return [];
+    
+    return historyData.history.map(m => ({
+      id: m._id,
+      text: m.message,
+      sender: String(m.senderId) === String(currentUserId) ? "me" : "them",
+      time: format(new Date(m.timestamp), "p")
+    }));
+  }, [historyData, currentUserId]);
+
+  const allMessages = currentMessages;
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !selectedChatId || !currentUserId) return;
+    
+    // Prevent sending message to self
+    if (String(selectedChatId) === String(currentUserId)) {
+      toast.error("You cannot send a message to yourself");
+      return;
+    }
+
+    const messageText = messageInput.trim();
+    setMessageInput("");
+
+    try {
+      await sendMessage({
+        message: messageText,
+        receiverId: String(selectedChatId),
+        senderId: currentUserId
+      }).unwrap();
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      toast.error("Failed to send notification to recipient");
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedChatId]);
+  }, [currentMessages, selectedChatId]);
 
   return (
     <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] h-[calc(100vh-180px)] min-h-[500px] flex overflow-hidden border border-[#F3F4F6]">
@@ -203,16 +367,29 @@ export function ChatsPage() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-center mb-0.5">
-                  <span className="font-bold text-[14px] text-[#1A1A2E] truncate">{chat.name}</span>
-                  <span className="text-[11px] text-[#9E9E9E]">{chat.time}</span>
+                <div className="flex justify-between items-start mb-1">
+                  <h3 className="font-bold text-[#111b21] text-[16px] truncate">{chat.name}</h3>
+                  <span className="text-[12px] text-[#667781] shrink-0 font-medium">{chat.time}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-[13px] text-[#757575] truncate mr-2">{chat.lastMessage}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-[14px] text-[#667781] truncate pr-2 flex-1">
+                      {chat.unreadCount === 0 && (
+                          // Check if this specific chat in the list is a pending outgoing request
+                          notificationsData?.notifs?.some(n => 
+                              String(n.senderId) === String(currentUserId) && 
+                              String(n.receiverId) === String(chat.id) && 
+                              n.type === "chat_request" && 
+                              !n.isRead
+                          ) ? (
+                              <span className="text-[#0A7EA4] font-medium italic">Pending Request...</span>
+                          ) : chat.lastMessage
+                      )}
+                      {chat.unreadCount > 0 && chat.lastMessage}
+                  </p>
                   {chat.unreadCount > 0 && (
-                    <span className="bg-[#0A7EA4] text-white text-[10px] font-bold min-w-[18px] h-[18px] rounded-full flex items-center justify-center px-1">
-                      {chat.unreadCount}
-                    </span>
+                    <div className="min-w-[20px] h-5 bg-[#00a884] rounded-full flex items-center justify-center px-1.5 shadow-sm">
+                      <span className="text-white text-[11px] font-bold">{chat.unreadCount}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -243,7 +420,10 @@ export function ChatsPage() {
                 >
                   <ArrowLeft className="w-6 h-6" />
                 </button>
-                <div className="relative">
+                <div 
+                  className="relative cursor-pointer"
+                  onClick={() => router.push(`/profile/${selectedChat.id}`)}
+                >
                   <div className="w-10 h-10 rounded-full overflow-hidden border border-[#E0E0E0]">
                     <ImageWithFallback src={selectedChat.avatar} alt={selectedChat.name} className="w-full h-full object-cover" />
                   </div>
@@ -251,8 +431,11 @@ export function ChatsPage() {
                     <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#4ADE80] border-2 border-white rounded-full" />
                   )}
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-bold text-[15px] text-[#1A1A2E]">{selectedChat.name}</span>
+                <div 
+                  className="flex flex-col cursor-pointer group/name"
+                  onClick={() => router.push(`/profile/${selectedChat.id}`)}
+                >
+                  <span className="font-bold text-[15px] text-[#1A1A2E] group-hover/name:text-[#0A7EA4] transition-colors">{selectedChat.name}</span>
                   <span className="text-[12px] text-[#4ADE80] font-medium">
                     {selectedChat.online ? "Online" : "Away"}
                   </span>
@@ -271,6 +454,45 @@ export function ChatsPage() {
               </div>
             </div>
 
+            {/* Acceptance Banner for Recipient */}
+            {isRecipientPending && (
+              <div className="bg-[#E0F2FE] border-b border-[#BAE6FD] p-4 animate-in fade-in slide-in-from-top duration-500">
+                <div className="max-w-2xl mx-auto">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3 text-[#0369A1]">
+                            <User className="w-5 h-5" />
+                            <span className="text-sm font-semibold">{selectedChat?.name} wants to chat with you.</span>
+                        </div>
+                        <button 
+                            onClick={() => markAsRead({ userId: currentUserId!, partnerId: String(selectedChatId) })}
+                            className="text-[#0A7EA4] text-xs font-bold hover:underline"
+                        >
+                            Just Accept
+                        </button>
+                    </div>
+                    
+                    {/* Quick Reply to Accept */}
+                    <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-[#BAE6FD] shadow-sm">
+                        <input 
+                            type="text"
+                            placeholder="Reply to accept..."
+                            value={messageInput}
+                            onChange={(e) => setMessageInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                            className="flex-1 bg-transparent border-none focus:outline-none text-sm px-3"
+                        />
+                        <button 
+                            onClick={handleSendMessage}
+                            disabled={isSending || !messageInput.trim()}
+                            className="px-4 py-1.5 bg-[#0A7EA4] text-white text-xs font-bold rounded-lg hover:bg-[#086a8a] disabled:opacity-50 transition-all"
+                        >
+                            Accept & Reply
+                        </button>
+                    </div>
+                </div>
+              </div>
+            )}
+
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar bg-[#E5DDD5] relative" style={{ 
               backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")',
@@ -286,7 +508,7 @@ export function ChatsPage() {
               </div>
 
               <div className="relative z-10 space-y-3">
-                {(MESSAGE_HISTORY[selectedChatId as keyof typeof MESSAGE_HISTORY] || []).map((msg) => (
+                {currentMessages.map((msg) => (
                   <div 
                     key={msg.id}
                     className={clsx(
@@ -314,37 +536,44 @@ export function ChatsPage() {
               </div>
             </div>
 
-            {/* Input Bar */}
-            <div className="h-[62px] bg-[#F0F2F5] px-4 flex items-center gap-3 shrink-0">
-              <button className="text-[#54656f] hover:text-[#111b21] transition-colors">
-                <Smile className="w-6 h-6" />
-              </button>
-              <button className="text-[#54656f] hover:text-[#111b21] transition-colors">
-                <Paperclip className="w-6 h-6" />
-              </button>
-              <div className="flex-1">
-                <input 
-                  type="text"
-                  placeholder="Type a message"
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && messageInput.trim()) {
-                      // Logic to send would go here
-                      setMessageInput("");
-                    }
-                  }}
-                  className="w-full h-10 bg-white border-none rounded-lg px-4 text-[15px] focus:outline-none placeholder:text-[#94a3b8]"
-                />
-              </div>
-              <button 
-                className={clsx(
-                  "w-10 h-10 flex items-center justify-center rounded-full transition-colors",
-                  messageInput.trim() ? "bg-[#00a884] text-white" : "text-[#54656f]"
-                )}
-              >
-                <Send className="w-5 h-5" />
-              </button>
+            {/* Chat Input */}
+            <div className="p-4 bg-white border-t border-[#F3F4F6] shrink-0">
+              {isSenderPending ? (
+                  <div className="p-4 bg-[#F9FAFB] border border-[#E5E7EB] rounded-xl text-center">
+                    <p className="text-sm font-medium text-[#6B7280]">
+                        Chat request pending. You can send more messages once {selectedChat?.name} accepts your request.
+                    </p>
+                  </div>
+              ) : (
+                <div className="flex items-center gap-2 md:gap-4 max-w-4xl mx-auto bg-[#F5F7FB] p-2 rounded-2xl border border-[#E0E0E0]">
+                    <button className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all"><Plus className="w-5 h-5" /></button>
+                    <input
+                    type="text"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                    placeholder="Type a message..."
+                    className="flex-1 bg-transparent border-none focus:outline-none text-[15px] placeholder:text-[#9E9E9E] px-2"
+                    />
+                    <div className="flex items-center gap-1 pr-1">
+                    <button className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all"><Smile className="w-5 h-5" /></button>
+                    <button 
+                        onClick={handleSendMessage}
+                        disabled={isSending || !messageInput.trim()}
+                        className={clsx(
+                        "p-2.5 rounded-xl transition-all shadow-sm active:scale-95",
+                        messageInput.trim() ? "bg-[#0A7EA4] text-white" : "bg-gray-200 text-gray-400"
+                        )}
+                    >
+                        {isSending ? (
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                            <Send className="w-5 h-5" />
+                        )}
+                    </button>
+                    </div>
+                </div>
+              )}
             </div>
           </>
         ) : (
