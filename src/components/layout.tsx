@@ -1,12 +1,11 @@
 "use client";
-import { ReactNode } from "react";
-import { Sidebar } from "./sidebar";
-import { Header } from "./header";
-import { PartnersSidebar } from "./partners-sidebar";
-import { MessagingOverlay } from "./messaging-overlay";
-import { AuthModal } from "./auth-modal";
-import { useState } from "react";
 import { useAppSelector } from "@/store/hooks";
+import { ReactNode, useState } from "react";
+import { AuthModal } from "./auth-modal";
+import { Header } from "./header";
+import { MessagingOverlay } from "./messaging-overlay";
+import { PartnersSidebar } from "./partners-sidebar";
+import { Sidebar } from "./sidebar";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -42,9 +41,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
           
           <PartnersSidebar 
-            isOpen={isPartnersOpen} 
-            onClose={() => setIsPartnersOpen(false)} 
-          />
+            isOpen={isPartnersOpen}
+            onClose={() => setIsPartnersOpen(false)} activeChats={[]} setActiveChats={function (chats: any[]): void {
+              throw new Error("Function not implemented.");
+            } }          />
 
           {/* Messaging Windows & Bar - Floating outside sidebar clipping */}
           {showChat && (
