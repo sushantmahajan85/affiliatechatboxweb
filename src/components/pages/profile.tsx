@@ -1,23 +1,23 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { useGetProfileQuery, useRegisterUserMutation } from "@/store/endpoints/auth";
+import { useAppSelector } from "@/store/hooks";
 import {
   AlertCircle,
   Calendar,
   CheckCircle2,
   ChevronRight,
+  Loader2,
   Mail,
   MapPin,
+  MessageCircle,
   Save,
   ShieldCheck,
   User,
-  X,
-  Loader2,
-  MessageCircle
+  X
 } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useAppSelector } from "@/store/hooks";
-import { useGetProfileQuery, useRegisterUserMutation } from "@/store/endpoints/auth";
+import { useEffect, useRef, useState } from "react";
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
@@ -331,11 +331,12 @@ export function ProfilePage({ id }: { id?: string }) {
               <span className="text-sm font-medium text-[#1A1A1A]">{profile.email}</span>
             )}
           </div>
-          <div className="flex justify-between items-center py-2 border-b border-[#F8FAFC]">
-            <span className="text-sm text-[#64748B]">Phone Number</span>
-            <span className="text-sm font-medium text-[#1A1A1A]">{profile.phone}</span>
-          </div>
-          
+          {isOwnProfile && (
+            <div className="flex justify-between items-center py-2 border-b border-[#F8FAFC]">
+              <span className="text-sm text-[#64748B]">Phone Number</span>
+              <span className="text-sm font-medium text-[#1A1A1A]">{profile.phone}</span>
+            </div>)}
+
           {isOwnProfile && (
             <div className="flex gap-3 pt-4">
               {isEditing ? (
