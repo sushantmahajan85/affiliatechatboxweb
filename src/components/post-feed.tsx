@@ -20,7 +20,6 @@ import {
 } from "@/store/endpoints/posts";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
-import { openChat } from "@/store/chatSlice";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
@@ -250,16 +249,6 @@ export function PostFeed({ activeTab }: PostFeedProps) {
               <p className="text-[14px] text-[#374151] leading-[1.6] mb-3 flex-1 line-clamp-3">
                 {post.postContent}
               </p>
-
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {post.tag !== "blank" && (
-                  <span className="text-[#0A7EA4] text-[13px] hover:underline cursor-pointer font-medium">
-                    #{post.tag}
-                  </span>
-                )}
-                <span className="text-[#0A7EA4] text-[13px] hover:underline cursor-pointer">#affiliatemarketing</span>
-              </div>
-
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
                 <button 
                   onClick={(e) => { 

@@ -7,7 +7,6 @@ import {
   Image as ImageIcon,
   Layers,
   Loader2,
-  Tag,
   X
 } from "lucide-react";
 import { useRef, useState } from "react";
@@ -152,29 +151,14 @@ export function CreatePost() {
               onChange={(e) => setCategory(e.target.value)}
               className="appearance-none pl-9 pr-8 h-full border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors focus:outline-none cursor-pointer bg-white min-w-[100px]"
             >
-              <option value="blank">General</option>
+              <option value="blank">Blank</option>
               <option value="sell">Sell</option>
               <option value="buy">Buy</option>
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#757575] pointer-events-none" />
           </div>
 
-          {/* Tags Dropdown */}
-          <div className="relative group h-[38px]">
-            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#757575] pointer-events-none" />
-            <select 
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              className="appearance-none pl-9 pr-8 h-full border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors focus:outline-none cursor-pointer bg-white min-w-[120px]"
-            >
-              <option value="">Add Tags</option>
-              <option value="SEO">SEO</option>
-              <option value="MARKETING">MARKETING</option>
-              <option value="Hiring">Hiring</option>
-              <option value="Affiliate">Affiliate</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#757575] pointer-events-none" />
-          </div>
+      
 
           {/* LinkedIn Checkbox */}
           <label className="flex items-center gap-3 px-3 h-[38px] border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors cursor-pointer group">

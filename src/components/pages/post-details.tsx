@@ -1,13 +1,10 @@
 "use client";
-import { useParams } from "next/navigation";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, MessageCircle, Flag, MoreVertical, Share2 } from "lucide-react";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { clsx } from "clsx";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
-import { openChat } from "@/store/chatSlice";
-import { toast } from "sonner";
+import { clsx } from "clsx";
+import { ArrowLeft, Flag, MessageCircle, MoreVertical, Share2 } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 
 // Mock data (in a real app, this would be fetched based on id)
 const POSTS = [
@@ -107,6 +104,24 @@ export function PostDetailsPage() {
 
   const post = data.post;
 
+
+const renderContent = (text: string) => {
+  const parts = text.split(/(#\w+)/g);
+
+  return parts.map((part: string, index: number) => {
+    if (part.startsWith("#")) {
+      return (
+        <span key={index} style={{ display: "block" }}>
+          <span style={{ color: "#0a66c2", cursor: "pointer" }}>
+            {part}
+          </span>
+        </span>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+};
+
   return (
     <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] overflow-hidden">
       {/* Header */}
@@ -181,8 +196,9 @@ export function PostDetailsPage() {
 
         <div className="space-y-4 mb-8">
           <p className="text-[16px] text-[#374151] leading-[1.7] whitespace-pre-wrap">
-            {post.postContent}
+          {renderContent(post.postContent)}
           </p>
+
           
           {post.postDescription && (
              <p className="text-[15px] text-[#4B5563] leading-[1.6] bg-[#F9FAFB] p-4 rounded-xl border border-[#F3F4F6]">
@@ -206,15 +222,6 @@ export function PostDetailsPage() {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-8">
-          {post.tag !== "blank" && (
-            <span className="text-[#0A7EA4] text-[15px] hover:underline cursor-pointer font-medium">
-              #{post.tag}
-            </span>
-          )}
-          <span className="text-[#0A7EA4] text-[15px] hover:underline cursor-pointer">#affiliatemarketing</span>
-          <span className="text-[#0A7EA4] text-[15px] hover:underline cursor-pointer">#networking</span>
-        </div>
 
         {/* Footer Actions */}
         <div className="pt-6 border-t border-[#F3F4F6] flex flex-col sm:flex-row gap-3">
