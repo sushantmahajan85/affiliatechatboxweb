@@ -2,6 +2,7 @@
 import { useAddPostMutation } from "@/store/endpoints/posts";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
+import { sharePostOnLinkedIn } from "@/utils/linkedin-service";
 import {
   ChevronDown,
   Image as ImageIcon,
@@ -21,7 +22,7 @@ export function CreatePost() {
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("blank"); // Maps to backend 'tag'
   const [tag, setTag] = useState(""); // Additional tag string
-  const [shareToLinkedin, setShareToLinkedin] = useState(false);
+  const [shareToLinkedin, setShareToLinkedin] = useState(true);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
@@ -73,6 +74,24 @@ export function CreatePost() {
 
       await addPost({ userId: user!._id, formData }).unwrap();
       
+      // Handle LinkedIn sharing if enabled
+      if (shareToLinkedin) {
+        if (user?.linkedInAccessToken && user?.linkedInId) {
+          const linkedinResult = await sharePostOnLinkedIn(
+            content,
+            user.linkedInAccessToken,
+            user.linkedInId
+          );
+          if (linkedinResult.success) {
+            toast.success("Also shared to your LinkedIn profile!");
+          } else {
+            toast.error(linkedinResult.data);
+          }
+        } else {
+          toast.warning("LinkedIn credentials not found. Post shared internally but not to LinkedIn.");
+        }
+      }
+
       toast.success("Post created successfully! It will appear in the feed once approved.");
       
       // Reset form

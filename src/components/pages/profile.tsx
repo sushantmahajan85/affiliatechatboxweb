@@ -57,7 +57,7 @@ export function ProfilePage({ id }: { id?: string }) {
       const user = data.user;
       const newProfile = {
         name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User",
-        avatar: user.profileImageUrl || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?q=80&w=250",
+        avatar: user.profileImageUrl || "https://static.vecteezy.com/system/resources/previews/026/327/062/non_2x/avatar-person-icon-profile-man-in-suit-or-tuxedo-for-business-office-portrait-png.png",
         bio: user.bio || "No bio provided.",
         location: user.location || "Not specified",
         joined: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not available",
