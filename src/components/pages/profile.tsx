@@ -1,7 +1,9 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useGetProfileQuery, useRegisterUserMutation } from "@/store/endpoints/auth";
-import { useAppSelector } from "@/store/hooks";
+import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { openConnectionModal } from "@/store/uiSlice";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { 
   FiAlertCircle, 
   FiBriefcase, 
@@ -31,9 +33,24 @@ import { useEffect, useRef, useState } from "react";
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
+  const dispatch = useAppDispatch();
   const { userId: currentUserId } = useAppSelector((state) => state.auth);
   const profileId = id || (currentUserId as string);
   const isOwnProfile = !id || id === currentUserId;
+
+  const { data: convData } = useGetConversationsQuery(currentUserId as string, {
+    skip: !currentUserId,
+  });
+
+  const handleStartChat = () => {
+    if (!currentUserId) return;
+    const hasChat = convData?.conversations?.some(c => c.id === profileId);
+    if (hasChat) {
+      router.push(`/chats?userId=${profileId}`);
+    } else {
+      dispatch(openConnectionModal(profileId));
+    }
+  };
 
   const { data, isLoading, isError, refetch } = useGetProfileQuery(profileId, {
     skip: !profileId,
@@ -267,7 +284,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <h1 className="text-2xl font-bold text-[#1A1A1A]">{profile.name}</h1>
                   {!isOwnProfile && (
                     <button 
-                      onClick={() => router.push(`/chats?userId=${profileId}`)}
+                      onClick={handleStartChat}
                       className="flex items-center justify-center gap-2 px-6 py-2 bg-[#0A7EA4] text-white rounded-xl text-sm font-bold hover:bg-[#086a8a] transition-all shadow-md active:scale-95 shrink-0"
                     >
                       <FiMessageCircle className="w-4 h-4" />

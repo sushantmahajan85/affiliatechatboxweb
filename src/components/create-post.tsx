@@ -52,6 +52,12 @@ export function CreatePost() {
       dispatch(openAuthModal());
       return;
     }
+    
+    if (!user?.isLinkedinVerified) {
+      toast.error("You must verify your LinkedIn account to create a post.");
+      return;
+    }
+
     if (!content.trim() && !file) {
       toast.error("Please add some content or a photo to your post.");
       return;

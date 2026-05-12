@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FaGoogle } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
+import { useAppDispatch } from "@/store/hooks";
+import { openConnectionModal } from "@/store/uiSlice";
 
 // Helper to convert country code (e.g., "IN") to flag emoji
 const getFlagEmoji = (countryCode: string) => {
@@ -19,8 +21,31 @@ const getFlagEmoji = (countryCode: string) => {
   return String.fromCodePoint(...codePoints);
 };
 
+import { useAppSelector } from "@/store/hooks";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
+
 export function DirectoryPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { user: currentUser } = useAppSelector((state) => state.auth);
+  
+  const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
+    skip: !currentUser?._id,
+  });
+
+  const handleStartChat = (memberId: string) => {
+    if (!currentUser) {
+      // Not logged in, can't chat
+      return;
+    }
+    const hasChat = convData?.conversations?.some(c => c.id === memberId);
+    if (hasChat) {
+      router.push(`/chats?userId=${memberId}`);
+    } else {
+      dispatch(openConnectionModal(memberId));
+    }
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 8;
@@ -164,7 +189,7 @@ export function DirectoryPage() {
 
               <div className="w-full pt-4 border-t border-[#F3F4F6]">
                 <button 
-                  onClick={() => router.push(`/chats?userId=${member.id}`)}
+                  onClick={() => handleStartChat(member.id)}
                   className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
                 >
                   <MessageCircle className="w-4 h-4" />

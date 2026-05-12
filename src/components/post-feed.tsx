@@ -19,7 +19,8 @@ import {
   useUnpinPostMutation
 } from "@/store/endpoints/posts";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { openAuthModal } from "@/store/uiSlice";
+import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
@@ -55,6 +56,24 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   // Mutations
   const [pinPost] = usePinPostMutation();
   const [unpinPost] = useUnpinPostMutation();
+  
+  const { data: convData } = useGetConversationsQuery(user?._id || "", {
+    skip: !user?._id,
+  });
+
+  const handleStartChat = (e: React.MouseEvent, postUserId: string) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
+    const hasChat = convData?.conversations?.some(c => c.id === postUserId);
+    if (hasChat) {
+      router.push(`/chats?userId=${postUserId}`);
+    } else {
+      dispatch(openConnectionModal(postUserId));
+    }
+  };
 
   const currentQuery = activeTab === "all" ? allPostsQuery : myPostsQuery;
   const rawPosts = currentQuery.data?.posts || [];
@@ -251,14 +270,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
               </p>
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
                 <button 
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    if (!isAuthenticated) {
-                      dispatch(openAuthModal());
-                      return;
-                    }
-                    router.push(`/chats?userId=${post.userId}`);
-                  }}
+                  onClick={(e) => handleStartChat(e, post.userId)}
                   className="flex-1 flex items-center justify-center gap-2 h-9 bg-[#0A7EA4] border border-[#0A7EA4] rounded-lg text-white text-[12px] font-medium hover:bg-[#086a8a] transition-colors shadow-sm"
                 >
                   <MessageCircle className="w-4 h-4 text-white" />

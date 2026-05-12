@@ -7,8 +7,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { openAuthModal } from "@/store/uiSlice";
+import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useParams, useRouter } from "next/navigation";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useEffect, useState } from "react";
 import {
   FaFacebookF,
@@ -51,11 +52,30 @@ export function PostDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { isAuthenticated } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, user: currentUser } = useAppSelector((state) => state.auth);
   const { data, isLoading, error } = useGetPostByIdQuery(id as string);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
+
+  const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
+    skip: !currentUser?._id,
+  });
+
+  const handleStartChat = () => {
+    if (!isAuthenticated || !currentUser) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (!data?.post) return;
+    
+    const hasChat = convData?.conversations?.some(c => c.id === data.post.userId);
+    if (hasChat) {
+      router.push(`/chats?userId=${data.post.userId}`);
+    } else {
+      dispatch(openConnectionModal(data.post.userId));
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -213,13 +233,7 @@ const renderContent = (text: string) => {
         {/* Footer Actions */}
         <div className="pt-6 border-t border-[#F3F4F6] flex flex-col sm:flex-row gap-3">
           <button 
-            onClick={() => {
-              if (!isAuthenticated) {
-                dispatch(openAuthModal());
-                return;
-              }
-              router.push(`/chats?userId=${post.userId}`);
-            }}
+            onClick={handleStartChat}
             className="flex-1 flex items-center justify-center gap-2 h-11 bg-[#0A7EA4] text-white rounded-xl text-[15px] font-bold hover:bg-[#086a8a] transition-colors shadow-sm"
           >
             <FiMessageCircle className="w-5 h-5" />

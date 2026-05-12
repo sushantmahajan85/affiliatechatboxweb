@@ -1,13 +1,17 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 
 interface UIState {
   isAuthModalOpen: boolean;
   authView: 'login' | 'otp' | 'verify-email';
+  isConnectionModalOpen: boolean;
+  connectionTargetId: string | null;
 }
 
 const initialState: UIState = {
   isAuthModalOpen: false,
   authView: 'login',
+  isConnectionModalOpen: false,
+  connectionTargetId: null,
 };
 
 const uiSlice = createSlice({
@@ -21,11 +25,19 @@ const uiSlice = createSlice({
     closeAuthModal: (state) => {
       state.isAuthModalOpen = false;
     },
-    setAuthView: (state, action: { payload: UIState['authView'] }) => {
+    setAuthView: (state, action: PayloadAction<UIState['authView']>) => {
       state.authView = action.payload;
+    },
+    openConnectionModal: (state, action: PayloadAction<string>) => {
+      state.isConnectionModalOpen = true;
+      state.connectionTargetId = action.payload;
+    },
+    closeConnectionModal: (state) => {
+      state.isConnectionModalOpen = false;
+      state.connectionTargetId = null;
     },
   },
 });
 
-export const { openAuthModal, closeAuthModal, setAuthView } = uiSlice.actions;
+export const { openAuthModal, closeAuthModal, setAuthView, openConnectionModal, closeConnectionModal } = uiSlice.actions;
 export default uiSlice.reducer;
