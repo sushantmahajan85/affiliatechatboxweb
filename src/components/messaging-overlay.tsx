@@ -19,7 +19,7 @@ import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
-import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
+import { sendFirestoreChatMessage, filterInboxFirestoreRooms, isAdminSupportChatPartner } from "@/lib/firebase-chat";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -169,6 +169,10 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
 
   const handleSend = async () => {
     if (!messageInput.trim() || !currentUserId || isSenderPending) return;
+    if (isAdminSupportChatPartner(String(chat.id))) {
+      toast.error("Use Contact Admin for support");
+      return;
+    }
     if (isFirebaseConfigured() && currentUserId) {
       const db = getFirestoreDb();
       if (!db) {
@@ -335,8 +339,7 @@ export function MessagingOverlay() {
 
   const recentChats = useMemo(() => {
     if (useFb) {
-      return listCtx.rooms
-        .map((r) => ({
+      return filterInboxFirestoreRooms(listCtx.rooms).map((r) => ({
           id: r.partnerId,
           name: "User",
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(r.partnerId.slice(-6))}&background=0A66C2&color=fff`,
@@ -347,7 +350,9 @@ export function MessagingOverlay() {
         }));
     }
     if (!convData?.conversations) return [];
-    return convData.conversations.map(c => ({
+    return convData.conversations
+      .filter((c) => !isAdminSupportChatPartner(String(c.id)))
+      .map((c) => ({
       id: c.id,
       name: c.name,
       avatar: c.avatar,
@@ -357,6 +362,14 @@ export function MessagingOverlay() {
       isRequest: c.unreadCount > 0
     }));
   }, [useFb, listCtx.rooms, convData]);
+
+  useEffect(() => {
+    for (const c of activeChats) {
+      if (isAdminSupportChatPartner(String(c.id))) {
+        dispatch(closeChat(c.id));
+      }
+    }
+  }, [activeChats, dispatch]);
 
   const visibleChats = useMemo(() => {
     if (activeTab === "requests") return recentChats.filter((c) => c.isRequest);

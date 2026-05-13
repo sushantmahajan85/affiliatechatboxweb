@@ -3,7 +3,11 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
-import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
+import {
+  filterInboxFirestoreRooms,
+  isAdminSupportChatPartner,
+  sendFirestoreChatMessage,
+} from "@/lib/firebase-chat";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation } from "@/store/endpoints/chats";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
@@ -100,7 +104,12 @@ export function ChatsPage() {
 
   const useFirestore = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, selectedChatId);
-  
+
+  const inboxFbRooms = useMemo(
+    () => (useFirestore && fbChat.active ? filterInboxFirestoreRooms(fbChat.rooms) : []),
+    [useFirestore, fbChat.active, fbChat.rooms]
+  );
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [markAsRead] = useMarkChatAsReadMutation();
   const { data: convData } = useGetConversationsQuery(currentUserId || "", {
@@ -120,7 +129,9 @@ export function ChatsPage() {
   // Fallback profile fetching for when we click from a profile page
   // (The user might not be in our conversation list yet)
   const isRealMongoId = typeof selectedChatId === "string" && selectedChatId.length > 10;
-  const inRestConv = !!convData?.conversations?.find((c) => String(c.id) === String(selectedChatId));
+  const inRestConv = !!convData?.conversations?.find(
+    (c) => String(c.id) === String(selectedChatId) && !isAdminSupportChatPartner(String(c.id))
+  );
   const { data: profileData } = useGetProfileQuery(selectedChatId as string, {
     skip: !isRealMongoId || inRestConv,
   });
@@ -130,7 +141,11 @@ export function ChatsPage() {
     const userId = searchParams?.get("userId");
     if (userId) {
       // Don't parseInt if it looks like a Mongo ID
-      const id = (userId.length > 10) ? userId : parseInt(userId);
+      const id = userId.length > 10 ? userId : parseInt(userId);
+      if (isAdminSupportChatPartner(String(id))) {
+        setSelectedChatId(null);
+        return;
+      }
       setSelectedChatId(id);
     }
   }, [searchParams]);
@@ -138,9 +153,10 @@ export function ChatsPage() {
   // Combined data to handle chats not in the mock list
   const selectedChat = useMemo(() => {
     if (!selectedChatId) return null;
+    if (isAdminSupportChatPartner(String(selectedChatId))) return null;
 
     if (useFirestore && fbChat.active) {
-      const row = fbChat.rooms.find((r) => r.partnerId === String(selectedChatId));
+      const row = inboxFbRooms.find((r) => r.partnerId === String(selectedChatId));
       if (row) {
         if (profileData?.user) {
           const u = profileData.user;
@@ -200,7 +216,7 @@ export function ChatsPage() {
       unreadCount: 0,
       tab: "messages"
     };
-  }, [selectedChatId, convData, profileData, useFirestore, fbChat.active, fbChat.rooms]);
+  }, [selectedChatId, convData, profileData, useFirestore, fbChat.active, inboxFbRooms]);
 
   const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
     skip: !currentUserId,
@@ -275,7 +291,9 @@ export function ChatsPage() {
     if (!convData?.conversations) return [];
     
     // Map existing conversations and check for unread notifications for each
-    return convData.conversations.map(c => {
+    return convData.conversations
+      .filter((c) => !isAdminSupportChatPartner(String(c.id)))
+      .map((c) => {
         const unreadNotifs = notificationsData?.notifs?.filter(n => 
             n.senderId === c.id && n.type === "chat_request" && !n.isRead
         ) || [];
@@ -331,13 +349,13 @@ export function ChatsPage() {
 
   const firestoreRequestRows = useMemo(() => {
     if (!useFirestore || !fbChat.active) return [];
-    return fbChat.rooms.filter((r) => r.isRequested === "pending" || r.isRequested === "declined");
-  }, [useFirestore, fbChat.active, fbChat.rooms]);
+    return inboxFbRooms.filter((r) => r.isRequested === "pending" || r.isRequested === "declined");
+  }, [useFirestore, fbChat.active, inboxFbRooms]);
 
   const firestoreAcceptedRows = useMemo(() => {
     if (!useFirestore || !fbChat.active) return [];
-    return fbChat.rooms.filter((r) => r.isRequested === "accepted");
-  }, [useFirestore, fbChat.active, fbChat.rooms]);
+    return inboxFbRooms.filter((r) => r.isRequested === "accepted");
+  }, [useFirestore, fbChat.active, inboxFbRooms]);
 
   const filteredFirestoreRows = useMemo(() => {
     if (!useFirestore || !fbChat.active) return [];
@@ -386,7 +404,12 @@ export function ChatsPage() {
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedChatId || !currentUserId) return;
-    
+
+    if (isAdminSupportChatPartner(String(selectedChatId))) {
+      toast.error("Use Contact Admin for support messages");
+      return;
+    }
+
     // Prevent sending message to self
     if (String(selectedChatId) === String(currentUserId)) {
       toast.error("You cannot send a message to yourself");

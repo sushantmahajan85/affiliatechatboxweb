@@ -14,6 +14,15 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import type { FirebaseStorage } from "firebase/storage";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+
+/** Same admin user id as Flutter `contact_admin.dart` / `posts.dart`. */
+export const FIRESTORE_ADMIN_SUPPORT_USER_ID = "658c582ff1bc8978d2300823";
+
+export function isAdminSupportChatPartner(partnerId: string): boolean {
+  return partnerId === FIRESTORE_ADMIN_SUPPORT_USER_ID;
+}
 
 export function buildChatRoomId(userA: string, userB: string): string {
   const [a, b] = [userA, userB].sort();
@@ -45,6 +54,11 @@ export interface FirestoreChatRoomRow {
   senderId: string;
   receiverId: string;
   isBlocked?: boolean;
+}
+
+/** Admin support thread is only listed on `/admin`, not main inbox / overlay. */
+export function filterInboxFirestoreRooms(rows: FirestoreChatRoomRow[]): FirestoreChatRoomRow[] {
+  return rows.filter((r) => !isAdminSupportChatPartner(r.partnerId));
 }
 
 export function subscribeMyChats(
@@ -90,6 +104,8 @@ export interface FirestoreMessageRow {
   sender: "me" | "them";
   timeLabel: string;
   timestampMs: number;
+  messageType: string;
+  imageUrl: string | null;
 }
 
 function formatTime(ms: number): string {
@@ -131,6 +147,8 @@ export function subscribeChatMessages(
           sender: sid === currentUserId ? "me" : "them",
           timeLabel: formatTime(timestampMs),
           timestampMs,
+          messageType: String(x.type ?? "text"),
+          imageUrl: x.imageUrl != null ? String(x.imageUrl) : null,
         };
       });
       onUpdate(rows);
@@ -214,6 +232,76 @@ export async function sendFirestoreChatMessage(
   });
 
   return chatRoomId;
+}
+
+/** Matches Flutter `ChatService.sendAdminMessage` — new admin threads start as `accepted`, not `pending`. */
+export async function sendFirestoreAdminMessage(
+  db: Firestore,
+  params: {
+    currentUserId: string;
+    adminReceiverId: string;
+    message: string;
+    messageType: "text" | "image";
+    imageUrl?: string | null;
+  }
+): Promise<string> {
+  const { currentUserId, adminReceiverId, message, messageType, imageUrl } = params;
+  const chatRoomId = buildChatRoomId(currentUserId, adminReceiverId);
+  const chatRef = doc(db, "chats", chatRoomId);
+
+  await runTransaction(db, async (txn) => {
+    const snap = await txn.get(chatRef);
+    const newMsgRef = doc(collection(chatRef, "messages"));
+    const msg: Record<string, unknown> = {
+      senderId: currentUserId,
+      receiverId: adminReceiverId,
+      message,
+      timestamp: serverTimestamp(),
+      lastMessageStatus: "Delivered",
+      type: messageType,
+    };
+    if (imageUrl) msg.imageUrl = imageUrl;
+    txn.set(newMsgRef, msg);
+
+    if (!snap.exists()) {
+      txn.set(chatRef, {
+        users: [currentUserId, adminReceiverId].sort(),
+        senderId: currentUserId,
+        receiverId: adminReceiverId,
+        chatRoomId,
+        isRequested: "accepted",
+        unreadCountFrom: 0,
+        unreadCountTo: 1,
+        lastMessage: message,
+        timestamp: serverTimestamp(),
+      });
+      return;
+    }
+
+    const d = snap.data() as Record<string, unknown>;
+    const updates: Record<string, unknown> = {
+      lastMessage: message,
+      timestamp: serverTimestamp(),
+    };
+    if (currentUserId === String(d.senderId ?? "")) {
+      updates.unreadCountTo = increment(1);
+    } else {
+      updates.unreadCountFrom = increment(1);
+    }
+    txn.update(chatRef, updates);
+  });
+
+  return chatRoomId;
+}
+
+export async function uploadFirestoreChatImage(
+  storage: FirebaseStorage,
+  params: { userId: string; chatRoomId: string; data: Uint8Array; contentType: string }
+): Promise<string> {
+  const fileName = `${params.userId}-${Date.now()}.jpg`;
+  const storageRef = ref(storage, `chat_images/${params.chatRoomId}/${fileName}`);
+  await uploadBytes(storageRef, params.data, { contentType: params.contentType });
+  return getDownloadURL(storageRef);
 }
 
 export async function acceptFirestoreChatRequest(db: Firestore, chatRoomId: string): Promise<void> {

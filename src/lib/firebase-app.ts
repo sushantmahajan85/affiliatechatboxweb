@@ -1,5 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getFirestore, type Firestore } from "firebase/firestore";
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 function envReady(value: string | undefined): boolean {
   return Boolean(value && value.trim());
@@ -34,4 +35,10 @@ export function getFirestoreDb(): Firestore | null {
   const app = getFirebaseApp();
   if (!app) return null;
   return getFirestore(app);
+}
+
+export function getFirebaseStorage(): FirebaseStorage | null {
+  const app = getFirebaseApp();
+  if (!app) return null;
+  return getStorage(app);
 }
