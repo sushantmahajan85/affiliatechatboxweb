@@ -23,14 +23,17 @@ const getFlagEmoji = (countryCode: string) => {
 
 import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 
 export function DirectoryPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user: currentUser } = useAppSelector((state) => state.auth);
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
   
   const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
-    skip: !currentUser?._id,
+    skip: !currentUser?._id || chatBackendIsFirebase,
   });
 
   const handleStartChat = (memberId: string) => {
@@ -38,7 +41,9 @@ export function DirectoryPage() {
       // Not logged in, can't chat
       return;
     }
-    const hasChat = convData?.conversations?.some(c => c.id === memberId);
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === memberId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === memberId));
     if (hasChat) {
       router.push(`/chats?userId=${memberId}`);
     } else {

@@ -10,6 +10,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useParams, useRouter } from "next/navigation";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { useEffect, useState } from "react";
 import {
   FaFacebookF,
@@ -58,8 +59,11 @@ export function PostDetailsPage() {
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
 
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
+
   const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
-    skip: !currentUser?._id,
+    skip: !currentUser?._id || chatBackendIsFirebase,
   });
 
   const handleStartChat = () => {
@@ -69,7 +73,9 @@ export function PostDetailsPage() {
     }
     if (!data?.post) return;
     
-    const hasChat = convData?.conversations?.some(c => c.id === data.post.userId);
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === data.post.userId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === data.post.userId));
     if (hasChat) {
       router.push(`/chats?userId=${data.post.userId}`);
     } else {

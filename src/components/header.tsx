@@ -29,8 +29,7 @@ function formatRelativeTime(dateString: string) {
   return `${Math.floor(diffInSeconds / 86400)}d ago`;
 }
 
-// No mock data - using notifications collection with type "chat_request"
-const RECENT_MESSAGES: any[] = [];
+
 
 export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
@@ -163,73 +162,15 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
             </AnimatePresence>
           </div>
 
-          {/* Messages Dropdown */}
+          {/* Messages Dropdownsdjfjasdjaslfjdksf */}
           <div className="relative" ref={messageRef}>
             <button 
-              onClick={() => { setShowMessages(!showMessages); setShowNotifications(false); }}
-              className={`relative p-1.5 rounded-full transition-all duration-200 ${showMessages ? 'bg-[#F0ECF9] text-[#7B61FF]' : 'text-[#757575] hover:bg-[#F5F5F5]'}`}
+              onClick={() => router.push('/chats')}
+              className="relative p-1.5 rounded-full transition-all duration-200 text-[#757575] hover:bg-[#F5F5F5]"
             >
               <MessageSquare className="w-5 h-5" />
-              {unreadMessageCount > 0 && (
-                <span className="absolute top-0 right-0 w-4 h-4 bg-[#0A7EA4] text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">
-                    {unreadMessageCount}
-                </span>
-              )}
             </button>
-            <AnimatePresence>
-              {showMessages && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-[#E0E0E0] overflow-hidden z-[1000]"
-                >
-                  <div className="p-4 border-b border-[#F0F0F0] flex items-center justify-between">
-                    <h3 className="font-bold text-[#1A1A2E]">Messages</h3>
-                    <button className="p-1 hover:bg-[#F5F5F5] rounded-full transition-colors"><MoreHorizontal className="w-4 h-4 text-[#757575]" /></button>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto scrollbar-hide">
-                    {messageNotifications.length > 0 ? (
-                        messageNotifications.slice(0, 10).map(msg => (
-                      <div 
-                        key={msg._id} 
-                        onClick={() => { router.push(`/chats?userId=${msg.senderId}`); setShowMessages(false); }}
-                        className="p-4 hover:bg-[#F9F9F9] transition-colors cursor-pointer flex gap-3 border-b border-[#F0F0F0] last:border-0"
-                      >
-                        <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-[#E0E0E0] bg-[#F3F4F6] flex items-center justify-center">
-                            <ImageWithFallback 
-                                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(msg.title)}&background=0A7EA4&color=fff`} 
-                                alt={msg.title} 
-                                className="w-full h-full object-cover" 
-                            />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex justify-between items-start mb-0.5">
-                            <p className="text-sm font-bold text-[#1A1A2E] truncate">{msg.title}</p>
-                            <span className="text-[10px] text-[#9E9E9E] shrink-0">{formatRelativeTime(msg.timestamp)}</span>
-                          </div>
-                          <p className="text-xs text-[#757575] truncate">{msg.message}</p>
-                        </div>
-                      </div>
-                    ))
-                    ) : (
-                        <div className="p-8 text-center bg-white">
-                            <MessageSquare className="w-8 h-8 text-[#E2E8F0] mx-auto mb-2 opacity-50" />
-                            <p className="text-xs text-[#94A3B8] font-bold">No new messages</p>
-                        </div>
-                    )}
-                  </div>
-                  <div className="p-3 bg-[#F9F9F9] text-center border-t border-[#F0F0F0]">
-                    <button 
-                      onClick={() => { router.push('/chats'); setShowMessages(false); }}
-                      className="text-sm font-bold text-[#0A7EA4] hover:underline"
-                    >
-                      Open in Chat Inbox
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            
           </div>
         </div>
 

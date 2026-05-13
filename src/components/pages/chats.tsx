@@ -1,7 +1,11 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
+import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
+import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
-import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation, useSendChatMessageMutation } from "@/store/endpoints/chats";
+import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation } from "@/store/endpoints/chats";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { useAppSelector } from "@/store/hooks";
 import { clsx } from "clsx";
@@ -23,32 +27,84 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-// No mock data - purely backend driven
-const CHATS_MOCK: any[] = [];
+function FirebaseChatSidebarRow(props: {
+  partnerId: string;
+  lastMessage: string;
+  displayTime: string;
+  unreadCount: number;
+  selected: boolean;
+  pendingOutgoing: boolean;
+  onSelect: () => void;
+}) {
+  const { data, isLoading } = useGetProfileQuery(props.partnerId, { skip: !props.partnerId });
+  const u = data?.user;
+  const name = u
+    ? `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email
+    : isLoading
+      ? "…"
+      : `User`;
+  const avatar =
+    u?.profileImageUrl ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0A7EA4&color=fff`;
 
-interface Message {
-  id: string | number;
-  text: string;
-  sender: "me" | "them";
-  time: string;
+  return (
+    <div
+      onClick={props.onSelect}
+      className={clsx(
+        "flex items-center gap-3 p-4 cursor-pointer transition-colors border-l-4",
+        props.selected ? "bg-[#F0F7F9] border-[#0A7EA4]" : "bg-white border-transparent hover:bg-[#F9FAFB]"
+      )}
+    >
+      <div className="relative shrink-0">
+        <div className="w-12 h-12 rounded-full overflow-hidden border border-[#E0E0E0]">
+          <ImageWithFallback src={avatar} alt={name} className="w-full h-full object-cover" />
+        </div>
+        <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4ADE80] border-2 border-white rounded-full" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-start mb-1">
+          <h3 className="font-bold text-[#111b21] text-[16px] truncate">{name}</h3>
+          <span className="text-[12px] text-[#667781] shrink-0 font-medium">{props.displayTime}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-[14px] text-[#667781] truncate pr-2 flex-1">
+            {props.unreadCount === 0 && props.pendingOutgoing ? (
+              <span className="text-[#0A7EA4] font-medium italic">Pending Request...</span>
+            ) : (
+              props.lastMessage
+            )}
+          </p>
+          {props.unreadCount > 0 && (
+            <div className="min-w-[20px] h-5 bg-[#00a884] rounded-full flex items-center justify-center px-1.5 shadow-sm">
+              <span className="text-white text-[11px] font-bold">{props.unreadCount}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ChatsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { userId: currentUserId } = useAppSelector((state) => state.auth);
-  
+  const { userId: authUserId, user: authUser } = useAppSelector((state) => state.auth);
+  const currentUserId = authUserId || authUser?._id || null;
+
   const [activeTab, setActiveTab] = useState<"messages" | "requests">("messages");
   const [selectedChatId, setSelectedChatId] = useState<string | number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [messageInput, setMessageInput] = useState("");
   const [lastNotifId, setLastNotifId] = useState<string | null>(null);
+  const [isFbSending, setIsFbSending] = useState(false);
+
+  const useFirestore = useChatBackendIsFirebase();
+  const fbChat = useFirebaseChatModule(currentUserId || undefined, selectedChatId);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [sendMessage, { isLoading: isSending }] = useSendChatMessageMutation();
   const [markAsRead] = useMarkChatAsReadMutation();
-  const { data: convData, isLoading: isConvLoading } = useGetConversationsQuery(currentUserId || "", {
-    skip: !currentUserId,
+  const { data: convData } = useGetConversationsQuery(currentUserId || "", {
+    skip: !currentUserId || useFirestore,
     pollingInterval: 3000 // Poll every 3 seconds
   });
 
@@ -57,15 +113,16 @@ export function ChatsPage() {
     userId1: currentUserId || "",
     userId2: String(selectedChatId)
   }, {
-    skip: !currentUserId || !selectedChatId,
+    skip: !currentUserId || !selectedChatId || useFirestore,
     pollingInterval: 3000 // Poll every 3 seconds for real-time history
   });
 
   // Fallback profile fetching for when we click from a profile page
   // (The user might not be in our conversation list yet)
   const isRealMongoId = typeof selectedChatId === "string" && selectedChatId.length > 10;
+  const inRestConv = !!convData?.conversations?.find((c) => String(c.id) === String(selectedChatId));
   const { data: profileData } = useGetProfileQuery(selectedChatId as string, {
-    skip: !isRealMongoId || !!convData?.conversations?.find(c => c.id === selectedChatId)
+    skip: !isRealMongoId || inRestConv,
   });
 
   // Handle incoming userId from navigation
@@ -81,9 +138,40 @@ export function ChatsPage() {
   // Combined data to handle chats not in the mock list
   const selectedChat = useMemo(() => {
     if (!selectedChatId) return null;
-    
+
+    if (useFirestore && fbChat.active) {
+      const row = fbChat.rooms.find((r) => r.partnerId === String(selectedChatId));
+      if (row) {
+        if (profileData?.user) {
+          const u = profileData.user;
+          return {
+            id: u._id,
+            name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
+            avatar:
+              u.profileImageUrl ||
+              `https://ui-avatars.com/api/?name=${u.firstName || "U"}&background=0A7EA4&color=fff`,
+            online: true,
+            lastMessage: row.lastMessage,
+            time: row.timestampMs ? format(new Date(row.timestampMs), "p") : "Now",
+            unreadCount: row.unreadCount,
+            tab: "messages",
+          };
+        }
+        return {
+          id: row.partnerId,
+          name: "User",
+          avatar: `https://ui-avatars.com/api/?name=U&background=0A7EA4&color=fff`,
+          online: true,
+          lastMessage: row.lastMessage,
+          time: row.timestampMs ? format(new Date(row.timestampMs), "p") : "Now",
+          unreadCount: row.unreadCount,
+          tab: "messages",
+        };
+      }
+    }
+
     // 1. Check if it's already in our active conversations list
-    const existing = convData?.conversations?.find(c => String(c.id) === String(selectedChatId));
+    const existing = convData?.conversations?.find((c) => String(c.id) === String(selectedChatId));
     if (existing) return existing;
 
     // 2. If it's a real user from profileData, use that
@@ -112,15 +200,21 @@ export function ChatsPage() {
       unreadCount: 0,
       tab: "messages"
     };
-  }, [selectedChatId, convData, profileData]);
+  }, [selectedChatId, convData, profileData, useFirestore, fbChat.active, fbChat.rooms]);
 
-  const { data: notificationsData, isLoading: isNotisLoading } = useGetNotificationsQuery(currentUserId || "", {
+  const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
     skip: !currentUserId,
     pollingInterval: 3000 // Poll every 3 seconds
   });
 
-  // Request Gate Logic (MOVED UP to avoid 'used before declaration' error)
+  // Request gate: Firestore matches Android chat doc; otherwise Mongo notifications + history
   const { isSenderPending, isRecipientPending } = useMemo(() => {
+    if (useFirestore && fbChat.active) {
+      return {
+        isSenderPending: fbChat.isSenderPending,
+        isRecipientPending: fbChat.isRecipientPending,
+      };
+    }
     if (!selectedChatId || !currentUserId || !notificationsData?.notifs) {
         return { isSenderPending: false, isRecipientPending: false };
     }
@@ -149,33 +243,32 @@ export function ChatsPage() {
         isSenderPending: sentRequest && !hasPartnerReplied, // Block A until B replies
         isRecipientPending: receivedRequest && !hasMeReplied // Show banner to B until B replies
     };
-  }, [selectedChatId, currentUserId, notificationsData, historyData]);
+  }, [useFirestore, fbChat.active, fbChat.isSenderPending, fbChat.isRecipientPending, selectedChatId, currentUserId, notificationsData, historyData]);
 
-  // Sound and Mark-as-read logic
+  // Sound and Mark-as-read logic (Mongo bell only — not used for Firestore chat)
   useEffect(() => {
+    if (useFirestore && fbChat.active) return;
     const unread = notificationsData?.notifs?.filter(n => n.type === "chat_request" && !n.isRead);
     if (!unread || unread.length === 0) return;
 
     const newest = unread[0];
     if (newest._id !== lastNotifId) {
-      // 1. Play premium notification sound
       const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
-      audio.play().catch(e => console.log("Sound play blocked by browser. Interaction required."));
+      audio.play().catch(() => undefined);
       setLastNotifId(newest._id);
       
-      // 2. If it's the currently selected chat and NOT a pending request, mark it as read immediately
       if (selectedChatId && newest.senderId === String(selectedChatId) && !isRecipientPending) {
           markAsRead({ userId: currentUserId || "", partnerId: String(selectedChatId) });
       }
     }
-  }, [notificationsData, selectedChatId, currentUserId, lastNotifId, markAsRead, isRecipientPending]);
+  }, [useFirestore, fbChat.active, notificationsData, selectedChatId, currentUserId, lastNotifId, markAsRead, isRecipientPending]);
 
-  // Mark as read when manually selecting a chat (only if it's already an active/accepted chat)
   useEffect(() => {
+    if (useFirestore && fbChat.active) return;
     if (selectedChatId && currentUserId && !isRecipientPending) {
         markAsRead({ userId: currentUserId, partnerId: String(selectedChatId) });
     }
-  }, [selectedChatId, currentUserId, markAsRead, isRecipientPending]);
+  }, [useFirestore, fbChat.active, selectedChatId, currentUserId, markAsRead, isRecipientPending]);
 
   // Unified list of all conversation partners
   const allConversations = useMemo(() => {
@@ -236,6 +329,25 @@ export function ChatsPage() {
       return allConversations.filter(c => !requestIds.has(String(c.id)));
   }, [allConversations, realRequests]);
 
+  const firestoreRequestRows = useMemo(() => {
+    if (!useFirestore || !fbChat.active) return [];
+    return fbChat.rooms.filter((r) => r.isRequested === "pending" || r.isRequested === "declined");
+  }, [useFirestore, fbChat.active, fbChat.rooms]);
+
+  const firestoreAcceptedRows = useMemo(() => {
+    if (!useFirestore || !fbChat.active) return [];
+    return fbChat.rooms.filter((r) => r.isRequested === "accepted");
+  }, [useFirestore, fbChat.active, fbChat.rooms]);
+
+  const filteredFirestoreRows = useMemo(() => {
+    if (!useFirestore || !fbChat.active) return [];
+    const basis = activeTab === "requests" ? firestoreRequestRows : firestoreAcceptedRows;
+    const q = searchQuery.toLowerCase();
+    return basis.filter(
+      (r) => r.lastMessage.toLowerCase().includes(q) || r.partnerId.toLowerCase().includes(q)
+    );
+  }, [useFirestore, fbChat.active, activeTab, firestoreRequestRows, firestoreAcceptedRows, searchQuery]);
+
   const filteredChats = useMemo(() => {
     // If we're on requests tab, show only the real requests
     if (activeTab === "requests") {
@@ -250,10 +362,18 @@ export function ChatsPage() {
   }, [activeTab, searchQuery, realConversations, realRequests]);
 
 
-  const requestCount = realRequests.length;
+  const requestCount = useFirestore && fbChat.active ? firestoreRequestRows.length : realRequests.length;
 
-  // Real history from backend
+  // Real history from backend or Firestore stream
   const currentMessages = useMemo(() => {
+    if (useFirestore && fbChat.active && selectedChatId) {
+      return fbChat.messages.map((m) => ({
+        id: m.id,
+        text: m.text,
+        sender: m.sender,
+        time: m.timeLabel,
+      }));
+    }
     if (!historyData?.history) return [];
     
     return historyData.history.map(m => ({
@@ -262,9 +382,7 @@ export function ChatsPage() {
       sender: String(m.senderId) === String(currentUserId) ? "me" : "them",
       time: format(new Date(m.timestamp), "p")
     }));
-  }, [historyData, currentUserId]);
-
-  const allMessages = currentMessages;
+  }, [useFirestore, fbChat.active, fbChat.messages, selectedChatId, historyData, currentUserId]);
 
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !selectedChatId || !currentUserId) return;
@@ -278,17 +396,38 @@ export function ChatsPage() {
     const messageText = messageInput.trim();
     setMessageInput("");
 
-    try {
-      await sendMessage({
-        message: messageText,
-        receiverId: String(selectedChatId),
-        senderId: currentUserId
-      }).unwrap();
-    } catch (err) {
-      console.error("Failed to send message:", err);
-      toast.error("Failed to send notification to recipient");
+    if (isFirebaseConfigured() && currentUserId) {
+      const db = getFirestoreDb();
+      if (!db) {
+        toast.error("Firebase is not ready");
+        return;
+      }
+      setIsFbSending(true);
+      try {
+        if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
+          await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+        }
+        await sendFirestoreChatMessage(db, {
+          currentUserId,
+          receiverId: String(selectedChatId),
+          message: messageText,
+          messageType: "text",
+        });
+      } catch (err) {
+        console.error("Failed to send Firestore message:", err);
+        toast.error("Failed to send message");
+      } finally {
+        setIsFbSending(false);
+      }
+      return;
     }
+
+    toast.error("Firebase chat is not configured");
   };
+
+  useEffect(() => {
+    if (fbChat.listError) toast.error(fbChat.listError);
+  }, [fbChat.listError]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -352,7 +491,37 @@ export function ChatsPage() {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto no-scrollbar">
-          {filteredChats.map((chat) => (
+          {useFirestore && fbChat.active ? (
+            <>
+              {!fbChat.listLoaded && (
+                <div className="p-8 text-center text-[#9E9E9E] text-[14px]">Loading chats…</div>
+              )}
+              {filteredFirestoreRows.map((r) => {
+                const date = r.timestampMs ? new Date(r.timestampMs) : null;
+                const displayTime =
+                  date && !Number.isNaN(date.getTime())
+                    ? new Date().toDateString() === date.toDateString()
+                      ? format(date, "p")
+                      : format(date, "MMM d")
+                    : "";
+                const pendingOutgoing =
+                  r.isRequested === "pending" && r.senderId === String(currentUserId);
+                return (
+                  <FirebaseChatSidebarRow
+                    key={r.chatRoomId}
+                    partnerId={r.partnerId}
+                    lastMessage={r.lastMessage}
+                    displayTime={displayTime}
+                    unreadCount={r.unreadCount}
+                    selected={String(selectedChatId) === r.partnerId}
+                    pendingOutgoing={pendingOutgoing}
+                    onSelect={() => setSelectedChatId(r.partnerId)}
+                  />
+                );
+              })}
+            </>
+          ) : (
+            filteredChats.map((chat) => (
             <div 
               key={chat.id}
               onClick={() => setSelectedChatId(chat.id)}
@@ -399,9 +568,11 @@ export function ChatsPage() {
                 </div>
               </div>
             </div>
-          ))}
+            ))
+          )}
 
-          {filteredChats.length === 0 && (
+          {((useFirestore && fbChat.active && fbChat.listLoaded && filteredFirestoreRows.length === 0) ||
+            (!useFirestore && filteredChats.length === 0)) && (
             <div className="p-8 text-center text-[#9E9E9E] text-[14px]">
               No {activeTab} found
             </div>
@@ -469,7 +640,17 @@ export function ChatsPage() {
                             <span className="text-sm font-semibold">{selectedChat?.name} wants to chat with you.</span>
                         </div>
                         <button 
-                            onClick={() => markAsRead({ userId: currentUserId!, partnerId: String(selectedChatId) })}
+                            onClick={async () => {
+                              if (useFirestore && fbChat.active && fbChat.activeChatRoomId) {
+                                try {
+                                  await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+                                } catch (e) {
+                                  console.error(e);
+                                }
+                                return;
+                              }
+                              void markAsRead({ userId: currentUserId!, partnerId: String(selectedChatId) });
+                            }}
                             className="text-[#0A7EA4] text-xs font-bold hover:underline"
                         >
                             Just Accept
@@ -488,7 +669,7 @@ export function ChatsPage() {
                         />
                         <button 
                             onClick={handleSendMessage}
-                            disabled={isSending || !messageInput.trim()}
+                            disabled={isFbSending || !messageInput.trim()}
                             className="px-4 py-1.5 bg-[#0A7EA4] text-white text-xs font-bold rounded-lg hover:bg-[#086a8a] disabled:opacity-50 transition-all"
                         >
                             Accept & Reply
@@ -564,13 +745,13 @@ export function ChatsPage() {
                     <button className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all"><Smile className="w-5 h-5" /></button>
                     <button 
                         onClick={handleSendMessage}
-                        disabled={isSending || !messageInput.trim()}
+                        disabled={isFbSending || !messageInput.trim()}
                         className={clsx(
                         "p-2.5 rounded-xl transition-all shadow-sm active:scale-95",
                         messageInput.trim() ? "bg-[#0A7EA4] text-white" : "bg-gray-200 text-gray-400"
                         )}
                     >
-                        {isSending ? (
+                        {isFbSending ? (
                             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         ) : (
                             <Send className="w-5 h-5" />

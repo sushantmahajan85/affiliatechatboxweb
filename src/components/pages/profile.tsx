@@ -4,6 +4,7 @@ import { useGetProfileQuery, useRegisterUserMutation } from "@/store/endpoints/a
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { 
   FiAlertCircle, 
   FiBriefcase, 
@@ -38,13 +39,18 @@ export function ProfilePage({ id }: { id?: string }) {
   const profileId = id || (currentUserId as string);
   const isOwnProfile = !id || id === currentUserId;
 
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
+
   const { data: convData } = useGetConversationsQuery(currentUserId as string, {
-    skip: !currentUserId,
+    skip: !currentUserId || chatBackendIsFirebase,
   });
 
   const handleStartChat = () => {
     if (!currentUserId) return;
-    const hasChat = convData?.conversations?.some(c => c.id === profileId);
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === profileId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === profileId));
     if (hasChat) {
       router.push(`/chats?userId=${profileId}`);
     } else {

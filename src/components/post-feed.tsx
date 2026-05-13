@@ -21,6 +21,7 @@ import {
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
@@ -57,8 +58,11 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   const [pinPost] = usePinPostMutation();
   const [unpinPost] = useUnpinPostMutation();
   
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
+
   const { data: convData } = useGetConversationsQuery(user?._id || "", {
-    skip: !user?._id,
+    skip: !user?._id || chatBackendIsFirebase,
   });
 
   const handleStartChat = (e: React.MouseEvent, postUserId: string) => {
@@ -67,7 +71,9 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       dispatch(openAuthModal());
       return;
     }
-    const hasChat = convData?.conversations?.some(c => c.id === postUserId);
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === postUserId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === postUserId));
     if (hasChat) {
       router.push(`/chats?userId=${postUserId}`);
     } else {

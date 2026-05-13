@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from "motion/react";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { 
-  X, Phone, Video, Smile, Paperclip, Send, 
+  X, Smile, Paperclip, Send, 
   CheckCheck, Search, MoreHorizontal, Edit3, 
-  ChevronDown, ChevronUp, User, Info
+  ChevronDown, ChevronUp, Info
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -13,37 +13,106 @@ import { closeChat, openChat, toggleMessagingBar } from "@/store/chatSlice";
 import { 
   useGetChatHistoryQuery, 
   useGetConversationsQuery, 
-  useSendChatMessageMutation,
   useMarkChatAsReadMutation 
 } from "@/store/endpoints/chats";
+import { useGetProfileQuery } from "@/store/endpoints/auth";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
+import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
+import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
 // --- Sub-component for individual Chat Windows ---
-function ChatWindow({ chat, onClose }: { chat: any; onClose: () => void }) {
-  const dispatch = useAppDispatch();
-  const { user: currentUser } = useAppSelector((state) => state.auth);
-  const currentUserId = currentUser?._id;
+type OverlayChatPeer = {
+  id: string;
+  name: string;
+  avatar: string;
+  status?: string;
+  isRequest?: boolean;
+};
+
+function OverlayChatListItem({
+  chat,
+  isActive,
+  onOpen,
+}: {
+  chat: OverlayChatPeer & { lastMsg: string; unreadCount: number };
+  isActive: boolean;
+  onOpen: (resolvedName: string, resolvedAvatar: string) => void;
+}) {
+  const { data: profileData } = useGetProfileQuery(chat.id, { skip: !chat.id });
+  const user = profileData?.user;
+  const resolvedName =
+    user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : chat.name;
+  const resolvedAvatar =
+    user?.profileImageUrl ||
+    chat.avatar ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=0A66C2&color=fff`;
+
+  return (
+    <div
+      onClick={() => onOpen(resolvedName, resolvedAvatar)}
+      className={clsx(
+        "flex items-start gap-3 cursor-pointer hover:bg-[#F3F6F8] p-3 transition-colors border-l-[3px]",
+        isActive ? "border-[#0A66C2] bg-[#F3F6F8]" : "border-transparent hover:border-[#0A66C2]"
+      )}
+    >
+      <div className="relative shrink-0 mt-0.5">
+        <div className="w-12 h-12 rounded-full overflow-hidden">
+          <ImageWithFallback src={resolvedAvatar} alt={resolvedName} className="w-full h-full object-cover" />
+        </div>
+        {chat.status === "online" && (
+          <div className="absolute bottom-0 right-0.5 w-3.5 h-3.5 bg-[#057642] border-2 border-white rounded-full"></div>
+        )}
+        {chat.unreadCount > 0 && (
+          <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
+            {chat.unreadCount}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col min-w-0 flex-1 border-b border-[#F1F5F9] pb-3 last:border-0">
+        <div className="flex items-center justify-between mb-0.5">
+          <span className="text-[14px] font-bold text-[#1A1A2E] truncate">{resolvedName}</span>
+          <span className="text-[12px] text-[#666666]">Today</span>
+        </div>
+        <span className="text-[12px] text-[#666666] line-clamp-2 leading-snug">{chat.lastMsg}</span>
+      </div>
+    </div>
+  );
+}
+
+function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => void }) {
+  const { userId: authUserId, user: currentUser } = useAppSelector((state) => state.auth);
+  const currentUserId = authUserId || currentUser?._id || undefined;
   const [messageInput, setMessageInput] = useState("");
   const [isAcceptedManually, setIsAcceptedManually] = useState(false);
+  const [isFbSending, setIsFbSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const useFb = useChatBackendIsFirebase();
+  const fbChat = useFirebaseChatModule(currentUserId || undefined, chat.id);
+
   const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
-    skip: !currentUserId,
+    skip: !currentUserId || useFb,
     pollingInterval: 3000
   });
 
   const { data: historyData } = useGetChatHistoryQuery(
     { userId1: currentUserId || "", userId2: chat.id },
-    { skip: !currentUserId || !chat.id, pollingInterval: 3000 }
+    { skip: !currentUserId || !chat.id || useFb, pollingInterval: 3000 }
   );
 
-  const [sendMessage, { isLoading: isSending }] = useSendChatMessageMutation();
   const [markAsRead] = useMarkChatAsReadMutation();
 
-  // Handshake/Gate Logic (Synced with main Chats page)
   const { isSenderPending, isRecipientPending } = useMemo(() => {
+    if (useFb && fbChat.active) {
+      return {
+        isSenderPending: fbChat.isSenderPending,
+        isRecipientPending: fbChat.isRecipientPending,
+      };
+    }
     if (!chat.id || !currentUserId || !notificationsData?.notifs) {
         return { isSenderPending: false, isRecipientPending: false };
     }
@@ -67,16 +136,24 @@ function ChatWindow({ chat, onClose }: { chat: any; onClose: () => void }) {
         isSenderPending: !!sentRequest && !hasPartnerReplied,
         isRecipientPending: !!receivedRequest && !hasMeReplied && !isAcceptedManually
     };
-  }, [chat.id, currentUserId, notificationsData, historyData, isAcceptedManually]);
+  }, [useFb, fbChat.active, fbChat.isSenderPending, fbChat.isRecipientPending, chat.id, currentUserId, notificationsData, historyData, isAcceptedManually]);
 
-  // Sync: Mark as Read when focused/viewed
   useEffect(() => {
+    if (useFb && fbChat.active) return;
     if (currentUserId && chat.id && !isRecipientPending) {
         markAsRead({ userId: currentUserId, partnerId: chat.id });
     }
-  }, [chat.id, currentUserId, isRecipientPending, markAsRead]);
+  }, [useFb, fbChat.active, chat.id, currentUserId, isRecipientPending, markAsRead]);
 
   const messages = useMemo(() => {
+    if (useFb && currentUserId) {
+      return fbChat.messages.map((m) => ({
+        id: m.id,
+        text: m.text,
+        isMe: m.sender === "me",
+        time: m.timeLabel,
+      }));
+    }
     if (!historyData?.history) return [];
     return historyData.history.map(m => ({
       id: m._id,
@@ -84,26 +161,46 @@ function ChatWindow({ chat, onClose }: { chat: any; onClose: () => void }) {
       isMe: String(m.senderId) === String(currentUserId),
       time: format(new Date(m.timestamp), "p")
     }));
-  }, [historyData, currentUserId]);
+  }, [useFb, fbChat.messages, historyData, currentUserId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSend = async () => {
-    if (!messageInput.trim() || !currentUserId || isSending || isSenderPending) return;
-    const text = messageInput.trim();
-    setMessageInput("");
-    try {
-      await sendMessage({
-        message: text,
-        receiverId: chat.id,
-        senderId: currentUserId
-      }).unwrap();
-    } catch (err) {
-      console.error("Failed to send message from popup:", err);
+    if (!messageInput.trim() || !currentUserId || isSenderPending) return;
+    if (isFirebaseConfigured() && currentUserId) {
+      const db = getFirestoreDb();
+      if (!db) {
+        toast.error("Firebase is not ready");
+        return;
+      }
+      if (isFbSending) return;
+      const text = messageInput.trim();
+      setMessageInput("");
+      setIsFbSending(true);
+      try {
+        if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
+          await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+        }
+        await sendFirestoreChatMessage(db, {
+          currentUserId,
+          receiverId: chat.id,
+          message: text,
+          messageType: "text",
+        });
+      } catch (err) {
+        console.error("Failed to send message from popup:", err);
+        toast.error("Failed to send");
+      } finally {
+        setIsFbSending(false);
+      }
+      return;
     }
+    toast.error("Firebase chat is not configured");
   };
+
+  const sendBusy = isFbSending;
 
   return (
     <div className="w-[300px] bg-white rounded-t-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-[#E0E0E0] overflow-hidden flex flex-col pointer-events-auto">
@@ -169,7 +266,17 @@ function ChatWindow({ chat, onClose }: { chat: any; onClose: () => void }) {
                   <p className="text-[11px] font-medium leading-tight">Accept request to start chatting</p>
               </div>
               <button 
-                  onClick={() => setIsAcceptedManually(true)} 
+                  onClick={async () => {
+                    if (useFb && fbChat.active && fbChat.activeChatRoomId) {
+                      try {
+                        await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+                      } catch (e) {
+                        console.error(e);
+                      }
+                      return;
+                    }
+                    setIsAcceptedManually(true);
+                  }} 
                   className="w-full h-8 bg-white text-[#0A7EA4] rounded-md text-[12px] font-bold hover:bg-[#F3F4F6] transition-colors shadow-sm"
               >
                   Accept & Reply
@@ -201,7 +308,7 @@ function ChatWindow({ chat, onClose }: { chat: any; onClose: () => void }) {
             />
           </div>
           <Send 
-            className={clsx("w-5 h-5 cursor-pointer transition-colors", (messageInput.trim() && !isRecipientPending) ? "text-[#0A66C2]" : "text-[#54656f]")} 
+            className={clsx("w-5 h-5 cursor-pointer transition-colors", (messageInput.trim() && !isRecipientPending && !sendBusy) ? "text-[#0A66C2]" : "text-[#54656f]")} 
             onClick={handleSend}
           />
         </div>
@@ -214,38 +321,60 @@ export function MessagingOverlay() {
   const dispatch = useAppDispatch();
   const { activeChats, isMessagingBarExpanded } = useAppSelector((state) => state.chat);
   const { user: currentUser } = useAppSelector((state) => state.auth);
+  const useFb = useChatBackendIsFirebase();
+  const listCtx = useFirebaseChatRoomsContext();
   
   const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
   const pathname = usePathname();
   const isHomePage = pathname === "/";
 
   const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
-    skip: !currentUser?._id,
+    skip: !currentUser?._id || useFb,
     pollingInterval: 5000
   });
 
   const recentChats = useMemo(() => {
+    if (useFb) {
+      return listCtx.rooms
+        .map((r) => ({
+          id: r.partnerId,
+          name: "User",
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(r.partnerId.slice(-6))}&background=0A66C2&color=fff`,
+          lastMsg: r.lastMessage,
+          status: "online" as const,
+          unreadCount: r.unreadCount,
+          isRequest: r.isRequested !== "accepted",
+        }));
+    }
     if (!convData?.conversations) return [];
     return convData.conversations.map(c => ({
       id: c.id,
       name: c.name,
       avatar: c.avatar,
       lastMsg: c.lastMessage,
-      status: c.online ? 'online' : 'offline',
-      unreadCount: c.unreadCount
+      status: c.online ? 'online' as const : 'offline' as const,
+      unreadCount: c.unreadCount,
+      isRequest: c.unreadCount > 0
     }));
-  }, [convData]);
+  }, [useFb, listCtx.rooms, convData]);
+
+  const visibleChats = useMemo(() => {
+    if (activeTab === "requests") return recentChats.filter((c) => c.isRequest);
+    return recentChats.filter((c) => !c.isRequest);
+  }, [activeTab, recentChats]);
 
   // Auto-Pop & Sound Logic
   const lastUnreadCountRef = useRef<Record<string, number>>({});
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-    // Wait until conversations data is fully loaded for the first time
-    if (!convData || !recentChats.length) return;
+    if (useFb) {
+      if (!listCtx.listLoaded || !recentChats.length) return;
+    } else {
+      if (!convData || !recentChats.length) return;
+    }
 
     if (isInitialLoadRef.current) {
-        // Record current state on load, don't pop up existing unreads
         recentChats.forEach(c => {
             lastUnreadCountRef.current[c.id] = c.unreadCount;
         });
@@ -259,8 +388,6 @@ export function MessagingOverlay() {
         const prevCount = lastUnreadCountRef.current[chat.id] || 0;
         
         if (chat.unreadCount > prevCount) {
-            // NEW MESSAGE RECEIVED!
-            // Automatically open if not already open (limited to 3 by slice logic)
             if (!activeChats.find(ac => ac.id === chat.id)) {
                 dispatch(openChat({ 
                     id: chat.id, 
@@ -270,16 +397,14 @@ export function MessagingOverlay() {
             }
             hasNewMessage = true;
         }
-        // Update tracked count
         lastUnreadCountRef.current[chat.id] = chat.unreadCount;
     });
 
     if (hasNewMessage && isHomePage) {
-        // Sound already handled by the slice or here
         const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
-        audio.play().catch(e => console.log("Audio play blocked by browser:", e));
+        audio.play().catch(() => undefined);
     }
-  }, [recentChats, activeChats, dispatch, isHomePage, convData]);
+  }, [recentChats, activeChats, dispatch, isHomePage, convData, useFb, listCtx.listLoaded]);
 
   // Only show messaging overlay on home page per user request
   if (!isHomePage) return null;
@@ -361,37 +486,19 @@ export function MessagingOverlay() {
               </div>
               
               <div className="flex-1 overflow-y-auto no-scrollbar bg-white">
-                {recentChats.map((chat, idx) => (
-                  <div 
-                    key={chat.id} 
-                    onClick={() => dispatch(openChat({ id: chat.id, name: chat.name, avatar: chat.avatar }))}
-                    className={clsx(
-                      "flex items-start gap-3 cursor-pointer hover:bg-[#F3F6F8] p-3 transition-colors border-l-[3px]",
-                      activeChats.find(c => c.id === chat.id) ? "border-[#0A66C2] bg-[#F3F6F8]" : "border-transparent hover:border-[#0A66C2]"
-                    )}
-                  >
-                    <div className="relative shrink-0 mt-0.5">
-                      <div className="w-12 h-12 rounded-full overflow-hidden">
-                        <ImageWithFallback src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
-                      </div>
-                      {chat.status === "online" && (
-                        <div className="absolute bottom-0 right-0.5 w-3.5 h-3.5 bg-[#057642] border-2 border-white rounded-full"></div>
-                      )}
-                      {chat.unreadCount > 0 && (
-                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
-                          {chat.unreadCount}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-col min-w-0 flex-1 border-b border-[#F1F5F9] pb-3 last:border-0">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[14px] font-bold text-[#1A1A2E] truncate">{chat.name}</span>
-                        <span className="text-[12px] text-[#666666]">Today</span>
-                      </div>
-                      <span className="text-[12px] text-[#666666] line-clamp-2 leading-snug">{chat.lastMsg}</span>
-                    </div>
-                  </div>
+                {visibleChats.map((chat) => (
+                  <OverlayChatListItem
+                    key={chat.id}
+                    chat={chat}
+                    isActive={Boolean(activeChats.find((c) => c.id === chat.id))}
+                    onOpen={(resolvedName, resolvedAvatar) =>
+                      dispatch(openChat({ id: chat.id, name: resolvedName, avatar: resolvedAvatar }))
+                    }
+                  />
                 ))}
+                {visibleChats.length === 0 && (
+                  <div className="p-4 text-center text-[12px] text-[#666666]">No chats found</div>
+                )}
               </div>
             </motion.div>
           )}

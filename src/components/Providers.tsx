@@ -3,6 +3,7 @@
 import { Provider } from "react-redux";
 import { store } from "@/store/store";
 import { AuthWrapper } from "./AuthWrapper";
+import { FirebaseChatRoomsProvider } from "@/context/FirebaseChatRoomsProvider";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -12,7 +13,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <GoogleOAuthProvider clientId={googleClientId}>
       <Provider store={store}>
         <AuthWrapper>
-          {children}
+          <FirebaseChatRoomsProvider>{children}</FirebaseChatRoomsProvider>
         </AuthWrapper>
       </Provider>
     </GoogleOAuthProvider>

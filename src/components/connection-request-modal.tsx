@@ -2,10 +2,11 @@
 import { useState } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { closeConnectionModal } from "@/store/uiSlice";
-import { useSendChatMessageMutation } from "@/store/endpoints/chats";
 import { toast } from "sonner";
 import { FiX, FiSend, FiLoader } from "react-icons/fi";
 import { useRouter } from "next/navigation";
+import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
+import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
 
 export function ConnectionRequestModal() {
   const dispatch = useAppDispatch();
@@ -14,7 +15,7 @@ export function ConnectionRequestModal() {
   const { user } = useAppSelector((state) => state.auth);
   
   const [message, setMessage] = useState("Hi, I'd like to connect with you!");
-  const [sendMessage, { isLoading }] = useSendChatMessageMutation();
+  const [fbSending, setFbSending] = useState(false);
 
   if (!isConnectionModalOpen || !connectionTargetId) return null;
 
@@ -28,21 +29,35 @@ export function ConnectionRequestModal() {
       return;
     }
 
-    try {
-      await sendMessage({
-        message: message.trim(),
-        receiverId: connectionTargetId,
-        senderId: user._id,
-      }).unwrap();
-      
-      toast.success("Connection request sent successfully!");
-      dispatch(closeConnectionModal());
-      setMessage("Hi, I'd like to connect with you!");
-      // Optionally redirect to chats or keep them on the page
-      router.push(`/chats?userId=${connectionTargetId}`);
-    } catch (error) {
-      toast.error("Failed to send connection request. Please try again.");
+    const senderId = user._id;
+
+    if (isFirebaseConfigured()) {
+      const db = getFirestoreDb();
+      if (!db) {
+        toast.error("Chat is not ready");
+        return;
+      }
+      setFbSending(true);
+      try {
+        await sendFirestoreChatMessage(db, {
+          currentUserId: senderId,
+          receiverId: connectionTargetId,
+          message: message.trim(),
+          messageType: "text",
+        });
+        toast.success("Connection request sent successfully!");
+        dispatch(closeConnectionModal());
+        setMessage("Hi, I'd like to connect with you!");
+        router.push(`/chats?userId=${connectionTargetId}`);
+      } catch {
+        toast.error("Failed to send connection request. Please try again.");
+      } finally {
+        setFbSending(false);
+      }
+      return;
     }
+
+    toast.error("Firebase chat is not configured");
   };
 
   return (
@@ -86,10 +101,10 @@ export function ConnectionRequestModal() {
           </button>
           <button
             onClick={handleSend}
-            disabled={isLoading || !message.trim()}
+            disabled={fbSending || !message.trim()}
             className="flex items-center gap-2 px-6 py-2 bg-[#0A7EA4] text-white rounded-xl text-sm font-bold hover:bg-[#086a8a] transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? <FiLoader className="w-4 h-4 animate-spin" /> : <FiSend className="w-4 h-4" />}
+            {fbSending ? <FiLoader className="w-4 h-4 animate-spin" /> : <FiSend className="w-4 h-4" />}
             Send Request
           </button>
         </div>
