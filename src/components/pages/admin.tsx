@@ -240,7 +240,7 @@ export function AdminPage() {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        {/* <div className="flex items-center gap-2 shrink-0">
           <button type="button" className="hidden sm:flex p-2.5 text-[#757575] hover:bg-[#F5F7FB] rounded-full transition-colors" aria-label="Phone">
             <Phone className="w-5 h-5" />
           </button>
@@ -253,7 +253,7 @@ export function AdminPage() {
           <button type="button" className="p-2.5 text-[#757575] hover:bg-[#F5F7FB] rounded-full transition-colors" aria-label="More">
             <MoreVertical className="w-5 h-5" />
           </button>
-        </div>
+        </div> */}
       </div>
 
       <div
