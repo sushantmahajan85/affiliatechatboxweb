@@ -640,7 +640,7 @@ export function ChatsPage() {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              {/* <div className="flex items-center gap-2">
                 <button className="p-2 text-[#757575] hover:bg-[#F5F7FB] rounded-full transition-colors">
                   <Phone className="w-5 h-5" />
                 </button>
@@ -650,7 +650,7 @@ export function ChatsPage() {
                 <button className="p-2 text-[#757575] hover:bg-[#F5F7FB] rounded-full transition-colors">
                   <MoreVertical className="w-5 h-5" />
                 </button>
-              </div>
+              </div> */}
             </div>
 
             {/* Acceptance Banner for Recipient */}
