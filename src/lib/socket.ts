@@ -1,10 +1,11 @@
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
 
 export const getSocket = () => {
   if (!socket) {
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "https://online-media-tools-server-vercel.vercel.app";
+    const backendUrl = getApiBaseUrl();
     // Connect to the backend socket
     socket = io(backendUrl, {
       transports: ["websocket"],

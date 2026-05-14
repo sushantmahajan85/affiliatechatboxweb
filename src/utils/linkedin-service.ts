@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "@/lib/api-base-url";
+
 export const sharePostOnLinkedIn = async (
   postContent: string,
   accessToken: string,
@@ -10,9 +12,7 @@ export const sharePostOnLinkedIn = async (
     };
   }
 
-  // Use the backend proxy to avoid CORS errors
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || "https://online-media-tools-server-vercel.vercel.app";
-  const url = `${backendUrl}/api/posts/share-on-linkedin`;
+  const url = `${getApiBaseUrl()}/api/posts/share-on-linkedin`;
 
   const body = {
     postContent: `\n\n${postContent}\n\nI am using #affiliatechatbox`,
