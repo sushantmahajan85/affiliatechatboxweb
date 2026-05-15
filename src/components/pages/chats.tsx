@@ -9,6 +9,7 @@ import {
   isAdminSupportChatPartner,
   sendFirestoreChatMessage,
 } from "@/lib/firebase-chat";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation } from "@/store/endpoints/chats";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
@@ -48,9 +49,7 @@ function FirebaseChatSidebarRow(props: {
     : isLoading
       ? "…"
       : `User`;
-  const avatar =
-    u?.profileImageUrl ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0A7EA4&color=fff`;
+  const avatar = resolveUserProfileImageUrl(u, name);
 
   return (
     <div
@@ -95,6 +94,7 @@ export function ChatsPage() {
   const searchParams = useSearchParams();
   const { userId: authUserId, user: authUser } = useAppSelector((state) => state.auth);
   const currentUserId = authUserId || authUser?._id || null;
+  const isAdminChatUser = authUser?.role === "admin";
 
   const [activeTab, setActiveTab] = useState<"messages" | "requests">("messages");
   const [selectedChatId, setSelectedChatId] = useState<string | number | null>(null);
@@ -143,7 +143,7 @@ export function ChatsPage() {
     selectedChatId && String(selectedChatId).length > 10 ? String(selectedChatId) : "";
   const { data: partnerLinkedinGuard, isSuccess: partnerLinkedinGuardReady } = useGetProfileQuery(
     guardPartnerMongoId,
-    { skip: !guardPartnerMongoId || !authUser?.isLinkedinVerified },
+    { skip: !guardPartnerMongoId || !authUser?.isLinkedinVerified || isAdminChatUser },
   );
 
   // Handle incoming userId from navigation
@@ -161,6 +161,7 @@ export function ChatsPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (isAdminChatUser) return;
     if (!authUser?.isLinkedinVerified || !guardPartnerMongoId) return;
     if (!partnerLinkedinGuardReady) return;
     const pu = partnerLinkedinGuard?.user;
@@ -172,6 +173,7 @@ export function ChatsPage() {
       router.replace("/chats");
     }
   }, [
+    isAdminChatUser,
     authUser?.isLinkedinVerified,
     guardPartnerMongoId,
     partnerLinkedinGuardReady,
@@ -192,9 +194,7 @@ export function ChatsPage() {
           return {
             id: u._id,
             name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
-            avatar:
-              u.profileImageUrl ||
-              `https://ui-avatars.com/api/?name=${u.firstName || "U"}&background=0A7EA4&color=fff`,
+            avatar: resolveUserProfileImageUrl(u, u.firstName || "U"),
             online: true,
             lastMessage: row.lastMessage,
             time: row.timestampMs ? format(new Date(row.timestampMs), "p") : "Now",
@@ -225,7 +225,7 @@ export function ChatsPage() {
         return {
             id: u._id,
             name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email,
-            avatar: u.profileImageUrl || `https://ui-avatars.com/api/?name=${u.firstName || "U"}&background=0A7EA4&color=fff`,
+            avatar: resolveUserProfileImageUrl(u, u.firstName || "U"),
             online: true,
             lastMessage: "",
             time: "Now",
@@ -445,7 +445,7 @@ export function ChatsPage() {
       return;
     }
 
-    if (authUser?.isLinkedinVerified) {
+    if (authUser?.isLinkedinVerified && !isAdminChatUser) {
       if (!partnerLinkedinGuardReady || !partnerLinkedinGuard?.user) {
         toast.error("Please wait a moment.");
         return;
@@ -500,7 +500,7 @@ export function ChatsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentMessages, selectedChatId]);
 
-  if (authUser && !authUser.isLinkedinVerified) {
+  if (authUser && !authUser.isLinkedinVerified && !isAdminChatUser) {
     return (
       <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-8 max-w-lg mx-auto border border-[#F3F4F6]">
         <h1 className="text-[20px] font-bold text-[#1A1A2E] mb-2">Chats</h1>

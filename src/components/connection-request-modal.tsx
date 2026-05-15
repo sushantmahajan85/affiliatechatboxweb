@@ -34,7 +34,7 @@ export function ConnectionRequestModal() {
       return;
     }
 
-    if (user.isLinkedinVerified) {
+    if (user.isLinkedinVerified && user.role !== "admin") {
       if (!targetReady) {
         toast.error("Please wait a moment and try again.");
         return;

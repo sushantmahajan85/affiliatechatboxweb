@@ -37,6 +37,7 @@ import { toast } from "sonner";
 
 import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetPostByIdQuery } from "@/store/endpoints/posts";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
@@ -77,7 +78,7 @@ export function PostDetailsPage() {
     }
     if (!data?.post) return;
 
-    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, data.post.isLinkedinVerified)) {
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, data.post.isLinkedinVerified, currentUser.role === "admin")) {
       setLinkedinGuardOpen(true);
       return;
     }
@@ -175,7 +176,7 @@ const renderContent = (text: string) => {
               onClick={() => router.push(`/profile/${post.userId}`)}
             >
               <ImageWithFallback 
-                src={post.profileImageUrl || `https://ui-avatars.com/api/?name=${post.userName}&background=0A7EA4&color=fff`} 
+                src={resolveUserProfileImageUrl({ profileImageUrl: post.profileImageUrl }, post.userName)} 
                 alt={post.userName} 
                 className="w-full h-full object-cover" 
               />

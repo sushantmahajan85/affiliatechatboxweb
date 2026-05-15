@@ -24,6 +24,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
@@ -75,7 +76,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       dispatch(openAuthModal());
       return;
     }
-    if (isLinkedinOnlyChatBlocked(user?.isLinkedinVerified, authorLinkedinVerified)) {
+    if (isLinkedinOnlyChatBlocked(user?.isLinkedinVerified, authorLinkedinVerified, user?.role === "admin")) {
       setLinkedinGuardOpen(true);
       return;
     }
@@ -192,7 +193,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                     onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
                   >
                     <ImageWithFallback 
-                      src={post.profileImageUrl || `https://ui-avatars.com/api/?name=${post.userName}&background=0A7EA4&color=fff`} 
+                      src={resolveUserProfileImageUrl({ profileImageUrl: post.profileImageUrl }, post.userName)} 
                       alt={post.userName} 
                       className="w-full h-full object-cover" 
                     />

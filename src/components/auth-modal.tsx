@@ -67,7 +67,9 @@ export function AuthModal() {
           email: userInfo.email,
           firstName: userInfo.given_name,
           lastName: userInfo.family_name || " ",
-          mobileNumber: ""
+          mobileNumber: "",
+          googleProfileImageUrl:
+            typeof userInfo.picture === "string" ? userInfo.picture : "",
         };
         
         const response = await googleLogin(payload).unwrap();

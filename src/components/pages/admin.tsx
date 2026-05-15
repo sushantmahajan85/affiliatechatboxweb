@@ -27,6 +27,7 @@ import {
 } from "@/lib/firebase-chat";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useAppSelector } from "@/store/hooks";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { format, isToday, isYesterday } from "date-fns";
 import { toast } from "sonner";
 
@@ -56,9 +57,7 @@ export function AdminPage() {
     return adminUser.mobileNumber ? String(adminUser.mobileNumber) : "Official Support";
   }, [adminUser]);
 
-  const adminAvatar =
-    adminUser?.profileImageUrl ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(adminDisplayName)}&background=0A7EA4&color=fff`;
+  const adminAvatar = resolveUserProfileImageUrl(adminUser, adminDisplayName);
 
   const [messages, setMessages] = useState<FirestoreMessageRow[]>([]);
   const [messageInput, setMessageInput] = useState("");

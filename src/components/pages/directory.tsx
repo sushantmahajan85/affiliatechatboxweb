@@ -26,6 +26,7 @@ import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 
 export function DirectoryPage() {
   const router = useRouter();
@@ -45,7 +46,7 @@ export function DirectoryPage() {
       // Not logged in, can't chat
       return;
     }
-    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified)) {
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified, currentUser.role === "admin")) {
       setLinkedinGuardOpen(true);
       return;
     }
@@ -70,7 +71,7 @@ export function DirectoryPage() {
   const members = rawUsers.map((u: any) => ({
     id: u._id,
     name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "Unnamed User",
-    avatar: u.profileImageUrl || `https://ui-avatars.com/api/?name=${u.firstName || "U"}+${u.lastName || "U"}&background=0A7EA4&color=fff`,
+    avatar: resolveUserProfileImageUrl(u, `${u.firstName || "U"} ${u.lastName || "U"}`),
     country: u.country || "Global",
     // Use helper if it looks like a country code, otherwise use as is
     flag: u.flag?.length === 2 ? getFlagEmoji(u.flag) : (u.flag || "🌐"),

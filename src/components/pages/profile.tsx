@@ -7,6 +7,7 @@ import { openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { 
   FiAlertCircle, 
   FiBriefcase, 
@@ -32,7 +33,7 @@ import {
   FaSkype 
 } from "react-icons/fa";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
@@ -48,17 +49,28 @@ export function ProfilePage({ id }: { id?: string }) {
     skip: !currentUserId || chatBackendIsFirebase,
   });
 
+  const hasConnectedChat = useMemo(() => {
+    if (!currentUserId || !profileId) return false;
+    if (String(currentUserId) === String(profileId)) return true;
+    if (chatBackendIsFirebase) {
+      return firebaseRooms.some(
+        (r) => String(r.partnerId) === String(profileId) && r.isRequested === "accepted"
+      );
+    }
+    return Boolean(convData?.conversations?.some((c) => String(c.id) === String(profileId)));
+  }, [currentUserId, profileId, chatBackendIsFirebase, firebaseRooms, convData?.conversations]);
+
+  const showProfileDetailSections = isOwnProfile || hasConnectedChat;
+
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
 
   const handleStartChat = () => {
     if (!currentUserId) return;
-    if (isLinkedinOnlyChatBlocked(viewerUser?.isLinkedinVerified, profile.linkedinVerified)) {
+    if (isLinkedinOnlyChatBlocked(viewerUser?.isLinkedinVerified, profile.linkedinVerified, viewerUser?.role === "admin")) {
       setLinkedinGuardOpen(true);
       return;
     }
-    const hasChat = chatBackendIsFirebase
-      ? firebaseRooms.some((r) => r.partnerId === profileId && r.isRequested === "accepted")
-      : Boolean(convData?.conversations?.some((c) => c.id === profileId));
+    const hasChat = hasConnectedChat;
     if (hasChat) {
       router.push(`/chats?userId=${profileId}`);
     } else {
@@ -105,7 +117,7 @@ export function ProfilePage({ id }: { id?: string }) {
       const user = data.user;
       const newProfile = {
         name: `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User",
-        avatar: user.profileImageUrl || "https://static.vecteezy.com/system/resources/previews/026/327/062/non_2x/avatar-person-icon-profile-man-in-suit-or-tuxedo-for-business-office-portrait-png.png",
+        avatar: resolveUserProfileImageUrl(user, `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User"),
         bio: user.bio || "No bio provided.",
         location: user.location || "Not specified",
         joined: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "Not available",
@@ -227,7 +239,7 @@ export function ProfilePage({ id }: { id?: string }) {
                 onChange={handleFileChange}
               />
             </div>
-            {profile.googleVerified && (
+            {showProfileDetailSections && profile.googleVerified && (
               <div className="absolute bottom-0 right-0 bg-blue-500 rounded-full p-1.5 border-2 border-white">
                 <FiShield className="w-4 h-4 text-white" />
               </div>
@@ -328,7 +340,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   {profile.bio}
                 </p>
                 
-                {/* Social Links Badge Row */}
+                {showProfileDetailSections && (
                 <div className="flex flex-wrap gap-2 mt-4 justify-center sm:justify-start">
                   {profile.linkedin && (
                     <a href={profile.linkedin.startsWith('http') ? profile.linkedin : `https://linkedin.com/in/${profile.linkedin}`} target="_blank" rel="noopener noreferrer" className="p-2 bg-[#F8FAFC] rounded-lg text-[#0A66C2] hover:bg-[#0A66C2]/10 transition-colors">
@@ -351,14 +363,15 @@ export function ProfilePage({ id }: { id?: string }) {
                     </a>
                   )}
                 </div>
+                )}
               </>
             )}
           </div>
         </div>
       </div>
 
-   
-
+      {showProfileDetailSections && (
+      <>
       {/* Social Links Card */}
       <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#F1F5F9]">
         <h3 className="text-[16px] font-bold text-[#1A1A1A] mb-6 flex items-center gap-2">
@@ -472,7 +485,6 @@ export function ProfilePage({ id }: { id?: string }) {
         </div>
       </div>
 
-      {/* Account Info Card */}
       <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#F1F5F9]">
         <h3 className="text-[16px] font-bold text-[#1A1A1A] mb-6 flex items-center gap-2">
           <FiUser className="w-5 h-5 text-[#64748B]" /> Account Information
@@ -530,9 +542,7 @@ export function ProfilePage({ id }: { id?: string }) {
         </div>
       </div>
 
-         {/* Trust & Authenticity Section - Only visible on own profile */}
-      {isOwnProfile && (
-        <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4">
           <h2 className="text-[15px] font-bold text-[#64748B] uppercase tracking-wider px-2">Trust & Authenticity</h2>
           <div className="bg-white rounded-[20px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#F1F5F9]">
             {/* Google Verification */}
@@ -602,6 +612,7 @@ export function ProfilePage({ id }: { id?: string }) {
             </div>
           </div>
         </div>
+      </>
       )}
     </div>
     <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />

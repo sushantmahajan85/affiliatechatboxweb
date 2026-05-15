@@ -3,6 +3,7 @@ import { Bell, ChevronDown, Menu, MessageCircle, MessageSquare, MoreHorizontal, 
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
@@ -83,16 +84,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
           <Menu className="w-6 h-6" />
         </button>
         
-        <div className="flex-1 max-w-[500px]">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#757575]" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="w-full h-9 md:h-10 bg-[#F5F5F5] rounded-full pl-10 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#0A7EA4]"
-            />
-          </div>
-        </div>
+
       </div>
 
       <div className="flex items-center gap-3 md:gap-6 ml-4">
@@ -190,7 +182,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
           >
             <div className="w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden border border-[#E0E0E0] shrink-0 group-hover:border-[#0A7EA4] transition-colors">
               <ImageWithFallback
-                src={user.profileImageUrl || `https://ui-avatars.com/api/?name=${user.firstName}+${user.lastName}&background=0A7EA4&color=fff`}
+                src={resolveUserProfileImageUrl(user, `${user.firstName} ${user.lastName}`)}
                 alt={`${user.firstName} ${user.lastName}`}
                 className="w-full h-full object-cover"
               />

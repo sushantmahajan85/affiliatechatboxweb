@@ -13,6 +13,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 
 export function CreatePost() {
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
@@ -120,7 +121,10 @@ export function CreatePost() {
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden shrink-0 border border-[#E0E0E0]">
           <ImageWithFallback
-           src={user?.profileImageUrl || `https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=0A7EA4&color=fff`}
+           src={resolveUserProfileImageUrl(
+              user ?? undefined,
+              `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User"
+            )}
                 alt={`${user?.firstName} ${user?.lastName}`}
             className="w-full h-full object-cover"
           />

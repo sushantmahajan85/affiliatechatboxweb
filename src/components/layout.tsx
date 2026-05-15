@@ -17,9 +17,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
   const isLinkedInVerified = user?.isLinkedinVerified || false;
+  const isAdmin = user?.role === "admin";
 
-  // Chat is hidden for Guests and users who are NOT LinkedIn verified
-  const showChat = isAuthenticated && isLinkedInVerified;
+  const showChat = isAuthenticated && (isLinkedInVerified || isAdmin);
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] font-sans text-[#1A1A2E] overflow-hidden">

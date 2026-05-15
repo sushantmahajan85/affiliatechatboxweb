@@ -21,6 +21,7 @@ import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
 import { sendFirestoreChatMessage, isAdminSupportChatPartner } from "@/lib/firebase-chat";
 import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -48,10 +49,7 @@ function OverlayChatListItem({
   const user = profileData?.user;
   const resolvedName =
     user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : chat.name;
-  const resolvedAvatar =
-    user?.profileImageUrl ||
-    chat.avatar ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(resolvedName)}&background=0A66C2&color=fff`;
+  const resolvedAvatar = resolveUserProfileImageUrl(user, resolvedName);
 
   return (
     <div
@@ -91,6 +89,7 @@ function OverlayChatListItem({
 function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => void }) {
   const { userId: authUserId, user: currentUser } = useAppSelector((state) => state.auth);
   const currentUserId = authUserId || currentUser?._id || undefined;
+  const isAdminChatUser = currentUser?.role === "admin";
   const [messageInput, setMessageInput] = useState("");
   const [isAcceptedManually, setIsAcceptedManually] = useState(false);
   const [isFbSending, setIsFbSending] = useState(false);
@@ -98,7 +97,7 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: partnerProfile, isSuccess: partnerProfileReady } = useGetProfileQuery(chat.id, {
-    skip: !chat.id || !currentUser?.isLinkedinVerified,
+    skip: !chat.id || (!currentUser?.isLinkedinVerified && !isAdminChatUser),
   });
 
   const useFb = useChatBackendIsFirebase();
@@ -183,7 +182,7 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
       toast.error("Use Contact Admin for support");
       return;
     }
-    if (currentUser?.isLinkedinVerified) {
+    if (currentUser?.isLinkedinVerified && !isAdminChatUser) {
       if (!partnerProfileReady || !partnerProfile?.user) {
         toast.error("Please wait a moment.");
         return;
@@ -432,7 +431,7 @@ export function MessagingOverlay() {
           <div className="flex items-center gap-2">
             <div className="relative">
               <div className="w-8 h-8 rounded-full bg-[#0A66C2] flex items-center justify-center overflow-hidden">
-                <ImageWithFallback src={currentUser?.profileImageUrl || `https://ui-avatars.com/api/?name=${currentUser?.firstName}&background=0A66C2&color=fff`} alt="User" />
+                <ImageWithFallback src={resolveUserProfileImageUrl(currentUser, currentUser?.firstName || "User")} alt="User" />
               </div>
               <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#057642] border-2 border-white rounded-full"></div>
             </div>
@@ -494,7 +493,7 @@ export function MessagingOverlay() {
                     chat={chat}
                     isActive={Boolean(activeChats.find((c) => c.id === chat.id))}
                     onOpen={(resolvedName, resolvedAvatar, partnerLinkedinVerified) => {
-                      if (isLinkedinOnlyChatBlocked(currentUser?.isLinkedinVerified, partnerLinkedinVerified)) {
+                      if (isLinkedinOnlyChatBlocked(currentUser?.isLinkedinVerified, partnerLinkedinVerified, currentUser?.role === "admin")) {
                         setLinkedinListGuardOpen(true);
                         return;
                       }
