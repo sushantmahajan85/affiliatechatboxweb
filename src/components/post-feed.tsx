@@ -18,6 +18,8 @@ import {
   usePinPostMutation,
   useUnpinPostMutation
 } from "@/store/endpoints/posts";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
@@ -65,10 +67,16 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     skip: !user?._id || chatBackendIsFirebase,
   });
 
-  const handleStartChat = (e: React.MouseEvent, postUserId: string) => {
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
+  const handleStartChat = (e: React.MouseEvent, postUserId: string, authorLinkedinVerified?: boolean) => {
     e.stopPropagation();
     if (!isAuthenticated) {
       dispatch(openAuthModal());
+      return;
+    }
+    if (isLinkedinOnlyChatBlocked(user?.isLinkedinVerified, authorLinkedinVerified)) {
+      setLinkedinGuardOpen(true);
       return;
     }
     const hasChat = chatBackendIsFirebase
@@ -162,6 +170,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   }
 
   return (
+    <>
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {posts.map((post: any) => {
@@ -276,7 +285,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
               </p>
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
                 <button 
-                  onClick={(e) => handleStartChat(e, post.userId)}
+                  onClick={(e) => handleStartChat(e, post.userId, post.isLinkedinVerified)}
                   className="flex-1 flex items-center justify-center gap-2 h-9 bg-[#0A7EA4] border border-[#0A7EA4] rounded-lg text-white text-[12px] font-medium hover:bg-[#086a8a] transition-colors shadow-sm"
                 >
                   <MessageCircle className="w-4 h-4 text-white" />
@@ -302,6 +311,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
         )}
       </div>
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 

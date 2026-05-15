@@ -2,15 +2,35 @@
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import {
+  browserNotificationsSupported,
+  getDesktopChatNotificationsEnabled,
+  getDesktopPushMasterEnabled,
+  requestBrowserNotificationPermission,
+  setDesktopChatNotificationsEnabled,
+  setDesktopPushMasterEnabled,
+} from "@/lib/web-desktop-notifications";
+import { getFirebaseWebVapidKey, syncWebFcmTokenToServer } from "@/lib/fcm-web";
+import { useAppSelector } from "@/store/hooks";
 
 export function SettingsPage() {
   const router = useRouter();
+  const { userId: authUserId, user, token } = useAppSelector((s) => s.auth);
+  const uid = authUserId || user?._id || "";
+  const [pushMaster, setPushMaster] = useState(false);
   const [chatEnabled, setChatEnabled] = useState(true);
   const [emailEnabled, setEmailEnabled] = useState(true);
+  const [permLabel, setPermLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPushMaster(getDesktopPushMasterEnabled());
+    setChatEnabled(getDesktopChatNotificationsEnabled());
+  }, []);
 
   const Toggle = ({ enabled, setEnabled }: { enabled: boolean; setEnabled: (v: boolean) => void }) => (
     <button 
+      type="button"
       onClick={() => setEnabled(!enabled)}
       className={`relative w-[48px] h-[24px] rounded-full transition-colors duration-200 outline-none ${
         enabled ? "bg-[#1C3A4A]" : "bg-[#D1D1D1]"
@@ -24,11 +44,55 @@ export function SettingsPage() {
     </button>
   );
 
+  const onPushMasterChange = useCallback(async (next: boolean) => {
+    if (next) {
+      if (!browserNotificationsSupported()) {
+        setPermLabel("This browser does not support notifications.");
+        return;
+      }
+      const p = await requestBrowserNotificationPermission();
+      if (p !== "granted") {
+        setPermLabel("Permission denied — enable notifications in the browser site settings.");
+        return;
+      }
+      if (!getFirebaseWebVapidKey()) {
+        setPermLabel(
+          "Add NEXT_PUBLIC_FIREBASE_VAPID_KEY (Firebase Console → Project settings → Cloud Messaging → Web Push certificates)."
+        );
+        return;
+      }
+      if (!uid || !token) {
+        setPermLabel("You must be logged in on this browser to register Firebase web push.");
+        return;
+      }
+      const saved = await syncWebFcmTokenToServer(uid, token);
+      if (!saved) {
+        setPermLabel(
+          "Notifications are allowed, but the web device token could not be saved. Deploy the API (webFcmToken field + /update_web_fcm_token) and try again."
+        );
+        return;
+      }
+      setDesktopPushMasterEnabled(true);
+      setPushMaster(true);
+      setPermLabel(null);
+      return;
+    }
+    setDesktopPushMasterEnabled(false);
+    setPushMaster(false);
+    setPermLabel(null);
+  }, [uid, token]);
+
+  const onChatToggle = useCallback((next: boolean) => {
+    setDesktopChatNotificationsEnabled(next);
+    setChatEnabled(next);
+  }, []);
+
   return (
     <div className="sm:-m-8 p-6 flex flex-col font-sans">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8 pt-2">
         <button 
+          type="button"
           onClick={() => router.back()}
           className="p-1 hover:bg-[#1C3A4A]/5 rounded-full transition-colors"
         >
@@ -41,26 +105,33 @@ export function SettingsPage() {
       <div className="bg-white rounded-[16px] shadow-[0_4px_12px_rgba(0,0,0,0.04)] overflow-hidden">
         
         {/* Push Notifications Row */}
-        <div 
-          onClick={() => {}} 
-          className="flex items-center justify-between px-5 py-[22px] cursor-pointer hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex flex-col gap-0.5">
+        <div className="flex items-center justify-between px-5 py-[22px]">
+          <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Push Notifications</span>
-            <span className="text-[13px] text-[#757575]">Receive push notifications</span>
+            <span className="text-[13px] text-[#757575]">
+              Firebase web push (same FCM pipeline as the Android app): works in the background and when the tab is closed (if the browser allows).
+            </span>
+            {permLabel && (
+              <span className="text-[12px] text-amber-700 mt-1">{permLabel}</span>
+            )}
           </div>
-          <ChevronRight className="w-5 h-5 text-[#B0B0B0]" />
+          <Toggle enabled={pushMaster} setEnabled={onPushMasterChange} />
         </div>
 
         <div className="h-[1px] bg-[#EEEEEE] mx-5" />
 
         {/* Chat Notifications Row */}
         <div className="flex items-center justify-between px-5 py-[22px]">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Chat Notifications</span>
-            <span className="text-[13px] text-[#757575]">Receive push notifications</span>
+            <span className="text-[13px] text-[#757575]">
+              Desktop alerts for new unread messages
+            </span>
           </div>
-          <Toggle enabled={chatEnabled} setEnabled={setChatEnabled} />
+          <Toggle
+            enabled={chatEnabled}
+            setEnabled={(v) => onChatToggle(v)}
+          />
         </div>
 
         <div className="h-[1px] bg-[#EEEEEE] mx-5" />
@@ -76,6 +147,17 @@ export function SettingsPage() {
           <Toggle enabled={emailEnabled} setEnabled={setEmailEnabled} />
         </div>
 
+        <div className="h-[1px] bg-[#EEEEEE] mx-5" />
+
+        <button
+          type="button"
+          onClick={() => router.push("/notifications")}
+          className="flex items-center justify-between px-5 py-[22px] cursor-pointer hover:bg-gray-50 transition-colors w-full text-left"
+        >
+          <span className="text-[16px] font-bold text-[#1A1A1A]">View in-app notifications</span>
+          <ChevronRight className="w-5 h-5 text-[#B0B0B0]" />
+        </button>
+
       </div>
 
       {/* Additional Android-style space at bottom */}
@@ -85,5 +167,3 @@ export function SettingsPage() {
     </div>
   );
 }
-
-

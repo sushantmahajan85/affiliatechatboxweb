@@ -1,4 +1,5 @@
 "use client";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
@@ -102,6 +103,8 @@ export function ChatsPage() {
   const [lastNotifId, setLastNotifId] = useState<string | null>(null);
   const [isFbSending, setIsFbSending] = useState(false);
 
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
   const useFirestore = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, selectedChatId);
 
@@ -136,6 +139,13 @@ export function ChatsPage() {
     skip: !isRealMongoId || inRestConv,
   });
 
+  const guardPartnerMongoId =
+    selectedChatId && String(selectedChatId).length > 10 ? String(selectedChatId) : "";
+  const { data: partnerLinkedinGuard, isSuccess: partnerLinkedinGuardReady } = useGetProfileQuery(
+    guardPartnerMongoId,
+    { skip: !guardPartnerMongoId || !authUser?.isLinkedinVerified },
+  );
+
   // Handle incoming userId from navigation
   useEffect(() => {
     const userId = searchParams?.get("userId");
@@ -149,6 +159,25 @@ export function ChatsPage() {
       setSelectedChatId(id);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!authUser?.isLinkedinVerified || !guardPartnerMongoId) return;
+    if (!partnerLinkedinGuardReady) return;
+    const pu = partnerLinkedinGuard?.user;
+    if (!pu || isAdminSupportChatPartner(guardPartnerMongoId)) return;
+    if (String(pu._id) !== guardPartnerMongoId) return;
+    if (!pu.isLinkedinVerified) {
+      setLinkedinGuardOpen(true);
+      setSelectedChatId(null);
+      router.replace("/chats");
+    }
+  }, [
+    authUser?.isLinkedinVerified,
+    guardPartnerMongoId,
+    partnerLinkedinGuardReady,
+    partnerLinkedinGuard,
+    router,
+  ]);
 
   // Combined data to handle chats not in the mock list
   const selectedChat = useMemo(() => {
@@ -416,6 +445,21 @@ export function ChatsPage() {
       return;
     }
 
+    if (authUser?.isLinkedinVerified) {
+      if (!partnerLinkedinGuardReady || !partnerLinkedinGuard?.user) {
+        toast.error("Please wait a moment.");
+        return;
+      }
+      if (String(partnerLinkedinGuard.user._id) !== String(selectedChatId)) {
+        toast.error("Please wait a moment.");
+        return;
+      }
+      if (!partnerLinkedinGuard.user.isLinkedinVerified) {
+        setLinkedinGuardOpen(true);
+        return;
+      }
+    }
+
     const messageText = messageInput.trim();
     setMessageInput("");
 
@@ -456,7 +500,27 @@ export function ChatsPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentMessages, selectedChatId]);
 
+  if (authUser && !authUser.isLinkedinVerified) {
+    return (
+      <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-8 max-w-lg mx-auto border border-[#F3F4F6]">
+        <h1 className="text-[20px] font-bold text-[#1A1A2E] mb-2">Chats</h1>
+        <p className="text-[#64748b] text-[14px] mb-6">
+          Messaging is only available between LinkedIn-verified members. Complete LinkedIn verification on your profile
+          to use chat.
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/profile")}
+          className="px-6 py-2.5 bg-[#0A7EA4] text-white rounded-xl text-sm font-bold hover:bg-[#086a8a] transition-colors"
+        >
+          Go to profile
+        </button>
+      </div>
+    );
+  }
+
   return (
+    <>
     <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] h-[calc(100vh-180px)] min-h-[500px] flex overflow-hidden border border-[#F3F4F6]">
       {/* Sidebar - Chat List */}
       <div className={clsx(
@@ -798,6 +862,8 @@ export function ChatsPage() {
         )}
       </div>
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 

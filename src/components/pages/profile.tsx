@@ -1,10 +1,12 @@
 "use client";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useGetProfileQuery, useRegisterUserMutation } from "@/store/endpoints/auth";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { 
   FiAlertCircle, 
   FiBriefcase, 
@@ -35,7 +37,7 @@ import { useEffect, useRef, useState } from "react";
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { userId: currentUserId } = useAppSelector((state) => state.auth);
+  const { userId: currentUserId, user: viewerUser } = useAppSelector((state) => state.auth);
   const profileId = id || (currentUserId as string);
   const isOwnProfile = !id || id === currentUserId;
 
@@ -46,8 +48,14 @@ export function ProfilePage({ id }: { id?: string }) {
     skip: !currentUserId || chatBackendIsFirebase,
   });
 
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
   const handleStartChat = () => {
     if (!currentUserId) return;
+    if (isLinkedinOnlyChatBlocked(viewerUser?.isLinkedinVerified, profile.linkedinVerified)) {
+      setLinkedinGuardOpen(true);
+      return;
+    }
     const hasChat = chatBackendIsFirebase
       ? firebaseRooms.some((r) => r.partnerId === profileId && r.isRequested === "accepted")
       : Boolean(convData?.conversations?.some((c) => c.id === profileId));
@@ -191,6 +199,7 @@ export function ProfilePage({ id }: { id?: string }) {
   }
 
   return (
+    <>
     <div className="flex flex-col gap-6 max-w-2xl mx-auto pb-12">
       {/* Profile Header Card */}
       <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#F1F5F9]">
@@ -595,6 +604,8 @@ export function ProfilePage({ id }: { id?: string }) {
         </div>
       )}
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 

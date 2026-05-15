@@ -1,4 +1,5 @@
 "use client";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useGetAllUsersQuery } from "@/store/endpoints/members";
 import { clsx } from "clsx";
@@ -24,6 +25,7 @@ const getFlagEmoji = (countryCode: string) => {
 import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 
 export function DirectoryPage() {
   const router = useRouter();
@@ -36,9 +38,15 @@ export function DirectoryPage() {
     skip: !currentUser?._id || chatBackendIsFirebase,
   });
 
-  const handleStartChat = (memberId: string) => {
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
+  const handleStartChat = (memberId: string, memberLinkedinVerified: boolean) => {
     if (!currentUser) {
       // Not logged in, can't chat
+      return;
+    }
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified)) {
+      setLinkedinGuardOpen(true);
       return;
     }
     const hasChat = chatBackendIsFirebase
@@ -126,6 +134,7 @@ export function DirectoryPage() {
   };
 
   return (
+    <>
     <div className="flex flex-col gap-6">
       {/* Search Header */}
       <div className="bg-white p-6 rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -194,7 +203,7 @@ export function DirectoryPage() {
 
               <div className="w-full pt-4 border-t border-[#F3F4F6]">
                 <button 
-                  onClick={() => handleStartChat(member.id)}
+                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified)}
                   className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -260,8 +269,8 @@ export function DirectoryPage() {
         </div>
       )}
     </div>
+
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
-
-
-

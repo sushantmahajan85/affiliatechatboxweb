@@ -12,17 +12,19 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { closeChat, openChat, toggleMessagingBar } from "@/store/chatSlice";
 import { 
   useGetChatHistoryQuery, 
-  useGetConversationsQuery, 
   useMarkChatAsReadMutation 
 } from "@/store/endpoints/chats";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
-import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { useInboxPreviewChats } from "@/hooks/use-inbox-preview-chats";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
-import { sendFirestoreChatMessage, filterInboxFirestoreRooms, isAdminSupportChatPartner } from "@/lib/firebase-chat";
+import { sendFirestoreChatMessage, isAdminSupportChatPartner } from "@/lib/firebase-chat";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 
 // --- Sub-component for individual Chat Windows ---
 type OverlayChatPeer = {
@@ -40,9 +42,9 @@ function OverlayChatListItem({
 }: {
   chat: OverlayChatPeer & { lastMsg: string; unreadCount: number };
   isActive: boolean;
-  onOpen: (resolvedName: string, resolvedAvatar: string) => void;
+  onOpen: (resolvedName: string, resolvedAvatar: string, partnerLinkedinVerified: boolean) => void;
 }) {
-  const { data: profileData } = useGetProfileQuery(chat.id, { skip: !chat.id });
+  const { data: profileData, isLoading } = useGetProfileQuery(chat.id, { skip: !chat.id });
   const user = profileData?.user;
   const resolvedName =
     user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : chat.name;
@@ -53,7 +55,10 @@ function OverlayChatListItem({
 
   return (
     <div
-      onClick={() => onOpen(resolvedName, resolvedAvatar)}
+      onClick={() => {
+        if (isLoading) return;
+        onOpen(resolvedName, resolvedAvatar, Boolean(user?.isLinkedinVerified));
+      }}
       className={clsx(
         "flex items-start gap-3 cursor-pointer hover:bg-[#F3F6F8] p-3 transition-colors border-l-[3px]",
         isActive ? "border-[#0A66C2] bg-[#F3F6F8]" : "border-transparent hover:border-[#0A66C2]"
@@ -89,7 +94,12 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
   const [messageInput, setMessageInput] = useState("");
   const [isAcceptedManually, setIsAcceptedManually] = useState(false);
   const [isFbSending, setIsFbSending] = useState(false);
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: partnerProfile, isSuccess: partnerProfileReady } = useGetProfileQuery(chat.id, {
+    skip: !chat.id || !currentUser?.isLinkedinVerified,
+  });
 
   const useFb = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, chat.id);
@@ -173,6 +183,16 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
       toast.error("Use Contact Admin for support");
       return;
     }
+    if (currentUser?.isLinkedinVerified) {
+      if (!partnerProfileReady || !partnerProfile?.user) {
+        toast.error("Please wait a moment.");
+        return;
+      }
+      if (!partnerProfile.user.isLinkedinVerified) {
+        setLinkedinGuardOpen(true);
+        return;
+      }
+    }
     if (isFirebaseConfigured() && currentUserId) {
       const db = getFirestoreDb();
       if (!db) {
@@ -207,6 +227,7 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
   const sendBusy = isFbSending;
 
   return (
+    <>
     <div className="w-[300px] bg-white rounded-t-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-[#E0E0E0] overflow-hidden flex flex-col pointer-events-auto">
       {/* Window Header */}
       <div className="p-2 border-b border-[#E0E0E0] flex items-center justify-between bg-white hover:bg-[#F3F6F8] cursor-pointer">
@@ -318,6 +339,8 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
         </div>
       )}
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 
@@ -325,43 +348,12 @@ export function MessagingOverlay() {
   const dispatch = useAppDispatch();
   const { activeChats, isMessagingBarExpanded } = useAppSelector((state) => state.chat);
   const { user: currentUser } = useAppSelector((state) => state.auth);
-  const useFb = useChatBackendIsFirebase();
-  const listCtx = useFirebaseChatRoomsContext();
-  
+  const [linkedinListGuardOpen, setLinkedinListGuardOpen] = useState(false);
+  const { recentChats, inboxReady } = useInboxPreviewChats();
+
   const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
   const pathname = usePathname();
   const isHomePage = pathname === "/";
-
-  const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
-    skip: !currentUser?._id || useFb,
-    pollingInterval: 5000
-  });
-
-  const recentChats = useMemo(() => {
-    if (useFb) {
-      return filterInboxFirestoreRooms(listCtx.rooms).map((r) => ({
-          id: r.partnerId,
-          name: "User",
-          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(r.partnerId.slice(-6))}&background=0A66C2&color=fff`,
-          lastMsg: r.lastMessage,
-          status: "online" as const,
-          unreadCount: r.unreadCount,
-          isRequest: r.isRequested !== "accepted",
-        }));
-    }
-    if (!convData?.conversations) return [];
-    return convData.conversations
-      .filter((c) => !isAdminSupportChatPartner(String(c.id)))
-      .map((c) => ({
-      id: c.id,
-      name: c.name,
-      avatar: c.avatar,
-      lastMsg: c.lastMessage,
-      status: c.online ? 'online' as const : 'offline' as const,
-      unreadCount: c.unreadCount,
-      isRequest: c.unreadCount > 0
-    }));
-  }, [useFb, listCtx.rooms, convData]);
 
   useEffect(() => {
     for (const c of activeChats) {
@@ -381,11 +373,7 @@ export function MessagingOverlay() {
   const isInitialLoadRef = useRef(true);
 
   useEffect(() => {
-    if (useFb) {
-      if (!listCtx.listLoaded || !recentChats.length) return;
-    } else {
-      if (!convData || !recentChats.length) return;
-    }
+    if (!inboxReady || !recentChats.length) return;
 
     if (isInitialLoadRef.current) {
         recentChats.forEach(c => {
@@ -417,12 +405,13 @@ export function MessagingOverlay() {
         const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
         audio.play().catch(() => undefined);
     }
-  }, [recentChats, activeChats, dispatch, isHomePage, convData, useFb, listCtx.listLoaded]);
+  }, [recentChats, activeChats, dispatch, isHomePage, inboxReady]);
 
   // Only show messaging overlay on home page per user request
   if (!isHomePage) return null;
 
   return (
+    <>
     <div className="fixed bottom-0 right-8 flex items-end gap-3 z-[100] pointer-events-none">
       {/* Active Chat Windows */}
       <div className="flex items-end gap-3 pointer-events-auto">
@@ -504,9 +493,13 @@ export function MessagingOverlay() {
                     key={chat.id}
                     chat={chat}
                     isActive={Boolean(activeChats.find((c) => c.id === chat.id))}
-                    onOpen={(resolvedName, resolvedAvatar) =>
-                      dispatch(openChat({ id: chat.id, name: resolvedName, avatar: resolvedAvatar }))
-                    }
+                    onOpen={(resolvedName, resolvedAvatar, partnerLinkedinVerified) => {
+                      if (isLinkedinOnlyChatBlocked(currentUser?.isLinkedinVerified, partnerLinkedinVerified)) {
+                        setLinkedinListGuardOpen(true);
+                        return;
+                      }
+                      dispatch(openChat({ id: chat.id, name: resolvedName, avatar: resolvedAvatar }));
+                    }}
                   />
                 ))}
                 {visibleChats.length === 0 && (
@@ -518,6 +511,8 @@ export function MessagingOverlay() {
         </AnimatePresence>
       </div>
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinListGuardOpen} onOpenChange={setLinkedinListGuardOpen} />
+    </>
   );
 }
 

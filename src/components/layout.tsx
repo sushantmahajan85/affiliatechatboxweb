@@ -7,6 +7,7 @@ import { MessagingOverlay } from "./messaging-overlay";
 import { PartnersSidebar } from "./partners-sidebar";
 import { Sidebar } from "./sidebar";
 import { ConnectionRequestModal } from "./connection-request-modal";
+import { DesktopNotificationBridge } from "./desktop-notification-bridge";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -54,6 +55,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
           <AuthModal />
           <ConnectionRequestModal />
+          {isAuthenticated && <DesktopNotificationBridge />}
 
           {/* Mobile Overlays */}
           {isSidebarOpen && (

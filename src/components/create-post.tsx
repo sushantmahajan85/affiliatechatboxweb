@@ -10,7 +10,7 @@ import {
   Loader2,
   X
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 
@@ -22,7 +22,14 @@ export function CreatePost() {
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("blank"); // Maps to backend 'tag'
   const [tag, setTag] = useState(""); // Additional tag string
+  const canShareToLinkedin = Boolean(
+    user?.isLinkedinVerified && user?.linkedInAccessToken && user?.linkedInId
+  );
   const [shareToLinkedin, setShareToLinkedin] = useState(true);
+
+  useEffect(() => {
+    if (!canShareToLinkedin) setShareToLinkedin(false);
+  }, [canShareToLinkedin]);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
@@ -53,11 +60,6 @@ export function CreatePost() {
       return;
     }
     
-    if (!user?.isLinkedinVerified) {
-      toast.error("You must verify your LinkedIn account to create a post.");
-      return;
-    }
-
     if (!content.trim() && !file) {
       toast.error("Please add some content or a photo to your post.");
       return;
@@ -67,7 +69,7 @@ export function CreatePost() {
       const formData = new FormData();
       formData.append("postContent", content);
       formData.append("tag", category);
-      formData.append("addedToLinkedin", String(shareToLinkedin));
+      formData.append("addedToLinkedin", String(canShareToLinkedin && shareToLinkedin));
       
       // Combine description and secondary tag if needed
       if (tag) {
@@ -81,7 +83,7 @@ export function CreatePost() {
       await addPost({ userId: user!._id, formData }).unwrap();
       
       // Handle LinkedIn sharing if enabled
-      if (shareToLinkedin) {
+      if (canShareToLinkedin && shareToLinkedin) {
         if (user?.linkedInAccessToken && user?.linkedInId) {
           const linkedinResult = await sharePostOnLinkedIn(
             content,
@@ -104,7 +106,7 @@ export function CreatePost() {
       setContent("");
       setCategory("blank");
       setTag("");
-      setShareToLinkedin(false);
+      setShareToLinkedin(canShareToLinkedin);
       removeFile();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to create post. Please try again.");
@@ -185,22 +187,23 @@ export function CreatePost() {
 
       
 
-          {/* LinkedIn Checkbox */}
-          <label className="flex items-center gap-3 px-3 h-[38px] border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors cursor-pointer group">
-            <div className="flex items-center gap-2">
-              <div className="bg-[#0A66C2] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-[1px] font-bold shrink-0">in</div>
-              <span className="hidden sm:inline">Share to LinkedIn</span>
-            </div>
-            <div className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={shareToLinkedin}
-                onChange={() => setShareToLinkedin(!shareToLinkedin)}
-                className="sr-only peer" 
-              />
-              <div className="w-8 h-4 bg-[#E0E0E0] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#0A7EA4]"></div>
-            </div>
-          </label>
+          {canShareToLinkedin && (
+            <label className="flex items-center gap-3 px-3 h-[38px] border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors cursor-pointer group">
+              <div className="flex items-center gap-2">
+                <div className="bg-[#0A66C2] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-[1px] font-bold shrink-0">in</div>
+                <span className="hidden sm:inline">Share to LinkedIn</span>
+              </div>
+              <div className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={shareToLinkedin}
+                  onChange={() => setShareToLinkedin(!shareToLinkedin)}
+                  className="sr-only peer" 
+                />
+                <div className="w-8 h-4 bg-[#E0E0E0] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#0A7EA4]"></div>
+              </div>
+            </label>
+          )}
 
         </div>
 

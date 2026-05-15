@@ -35,6 +35,8 @@ import { toast } from "sonner";
 
 
 
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { useGetPostByIdQuery } from "@/store/endpoints/posts";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
@@ -66,12 +68,19 @@ export function PostDetailsPage() {
     skip: !currentUser?._id || chatBackendIsFirebase,
   });
 
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
   const handleStartChat = () => {
     if (!isAuthenticated || !currentUser) {
       dispatch(openAuthModal());
       return;
     }
     if (!data?.post) return;
+
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, data.post.isLinkedinVerified)) {
+      setLinkedinGuardOpen(true);
+      return;
+    }
     
     const hasChat = chatBackendIsFirebase
       ? firebaseRooms.some((r) => r.partnerId === data.post.userId && r.isRequested === "accepted")
@@ -136,6 +145,7 @@ const renderContent = (text: string) => {
 };
 
   return (
+    <>
     <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-[#E0E0E0] flex items-center justify-between">
@@ -365,6 +375,8 @@ const renderContent = (text: string) => {
         </DialogContent>
       </Dialog>
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 
