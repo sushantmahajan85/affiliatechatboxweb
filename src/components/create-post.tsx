@@ -2,17 +2,18 @@
 import { useAddPostMutation } from "@/store/endpoints/posts";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
+import { sharePostOnLinkedIn } from "@/utils/linkedin-service";
 import {
   ChevronDown,
   Image as ImageIcon,
   Layers,
   Loader2,
-  Tag,
   X
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 
 export function CreatePost() {
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
@@ -22,7 +23,14 @@ export function CreatePost() {
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("blank"); // Maps to backend 'tag'
   const [tag, setTag] = useState(""); // Additional tag string
-  const [shareToLinkedin, setShareToLinkedin] = useState(false);
+  const canShareToLinkedin = Boolean(
+    user?.isLinkedinVerified && user?.linkedInAccessToken && user?.linkedInId
+  );
+  const [shareToLinkedin, setShareToLinkedin] = useState(true);
+
+  useEffect(() => {
+    if (!canShareToLinkedin) setShareToLinkedin(false);
+  }, [canShareToLinkedin]);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
@@ -52,6 +60,7 @@ export function CreatePost() {
       dispatch(openAuthModal());
       return;
     }
+    
     if (!content.trim() && !file) {
       toast.error("Please add some content or a photo to your post.");
       return;
@@ -61,7 +70,7 @@ export function CreatePost() {
       const formData = new FormData();
       formData.append("postContent", content);
       formData.append("tag", category);
-      formData.append("addedToLinkedin", String(shareToLinkedin));
+      formData.append("addedToLinkedin", String(canShareToLinkedin && shareToLinkedin));
       
       // Combine description and secondary tag if needed
       if (tag) {
@@ -74,13 +83,31 @@ export function CreatePost() {
 
       await addPost({ userId: user!._id, formData }).unwrap();
       
+      // Handle LinkedIn sharing if enabled
+      if (canShareToLinkedin && shareToLinkedin) {
+        if (user?.linkedInAccessToken && user?.linkedInId) {
+          const linkedinResult = await sharePostOnLinkedIn(
+            content,
+            user.linkedInAccessToken,
+            user.linkedInId
+          );
+          if (linkedinResult.success) {
+            toast.success("Also shared to your LinkedIn profile!");
+          } else {
+            toast.error(linkedinResult.data);
+          }
+        } else {
+          toast.warning("LinkedIn credentials not found. Post shared internally but not to LinkedIn.");
+        }
+      }
+
       toast.success("Post created successfully! It will appear in the feed once approved.");
       
       // Reset form
       setContent("");
       setCategory("blank");
       setTag("");
-      setShareToLinkedin(false);
+      setShareToLinkedin(canShareToLinkedin);
       removeFile();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to create post. Please try again.");
@@ -94,7 +121,10 @@ export function CreatePost() {
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <div className="w-10 h-10 md:w-11 md:h-11 rounded-full overflow-hidden shrink-0 border border-[#E0E0E0]">
           <ImageWithFallback
-           src={user?.profileImageUrl || `https://ui-avatars.com/api/?name=${user?.firstName}+${user?.lastName}&background=0A7EA4&color=fff`}
+           src={resolveUserProfileImageUrl(
+              user ?? undefined,
+              `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User"
+            )}
                 alt={`${user?.firstName} ${user?.lastName}`}
             className="w-full h-full object-cover"
           />
@@ -152,46 +182,32 @@ export function CreatePost() {
               onChange={(e) => setCategory(e.target.value)}
               className="appearance-none pl-9 pr-8 h-full border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors focus:outline-none cursor-pointer bg-white min-w-[100px]"
             >
-              <option value="blank">General</option>
+              <option value="blank">Blank</option>
               <option value="sell">Sell</option>
               <option value="buy">Buy</option>
             </select>
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#757575] pointer-events-none" />
           </div>
 
-          {/* Tags Dropdown */}
-          <div className="relative group h-[38px]">
-            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#757575] pointer-events-none" />
-            <select 
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              className="appearance-none pl-9 pr-8 h-full border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors focus:outline-none cursor-pointer bg-white min-w-[120px]"
-            >
-              <option value="">Add Tags</option>
-              <option value="SEO">SEO</option>
-              <option value="MARKETING">MARKETING</option>
-              <option value="Hiring">Hiring</option>
-              <option value="Affiliate">Affiliate</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#757575] pointer-events-none" />
-          </div>
+      
 
-          {/* LinkedIn Checkbox */}
-          <label className="flex items-center gap-3 px-3 h-[38px] border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors cursor-pointer group">
-            <div className="flex items-center gap-2">
-              <div className="bg-[#0A66C2] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-[1px] font-bold shrink-0">in</div>
-              <span className="hidden sm:inline">Share to LinkedIn</span>
-            </div>
-            <div className="relative inline-flex items-center cursor-pointer">
-              <input 
-                type="checkbox" 
-                checked={shareToLinkedin}
-                onChange={() => setShareToLinkedin(!shareToLinkedin)}
-                className="sr-only peer" 
-              />
-              <div className="w-8 h-4 bg-[#E0E0E0] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#0A7EA4]"></div>
-            </div>
-          </label>
+          {canShareToLinkedin && (
+            <label className="flex items-center gap-3 px-3 h-[38px] border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[13px] hover:bg-[#F5F5F5] transition-colors cursor-pointer group">
+              <div className="flex items-center gap-2">
+                <div className="bg-[#0A66C2] text-white text-[9px] w-4 h-4 flex items-center justify-center rounded-[1px] font-bold shrink-0">in</div>
+                <span className="hidden sm:inline">Share to LinkedIn</span>
+              </div>
+              <div className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={shareToLinkedin}
+                  onChange={() => setShareToLinkedin(!shareToLinkedin)}
+                  className="sr-only peer" 
+                />
+                <div className="w-8 h-4 bg-[#E0E0E0] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-[#0A7EA4]"></div>
+              </div>
+            </label>
+          )}
 
         </div>
 

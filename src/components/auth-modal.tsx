@@ -20,6 +20,7 @@ import {
   useMobileContactMutation, 
   useVerifyUserMutation 
 } from "@/store/endpoints/auth";
+import { getApiBaseUrl } from "@/lib/api-base-url";
 import { useGoogleLogin } from "@react-oauth/google";
 
 // SVG Icons (Reused from auth.tsx)
@@ -66,7 +67,9 @@ export function AuthModal() {
           email: userInfo.email,
           firstName: userInfo.given_name,
           lastName: userInfo.family_name || " ",
-          mobileNumber: ""
+          mobileNumber: "",
+          googleProfileImageUrl:
+            typeof userInfo.picture === "string" ? userInfo.picture : "",
         };
         
         const response = await googleLogin(payload).unwrap();
@@ -87,9 +90,7 @@ export function AuthModal() {
 
   const handleLinkedinLogin = () => {
     // Calling the backend redirect endpoint directly is cleaner if the backend handles the full flow
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "https://online-media-tools-server-vercel.vercel.app";
-    // Adding a timestamp to prevent browser from caching the redirect
-    window.location.href = `${backendUrl}/auth/linkedin?t=${Date.now()}`;
+    window.location.href = `${getApiBaseUrl()}/auth/linkedin?t=${Date.now()}`;
   };
 
   useEffect(() => {
@@ -103,7 +104,7 @@ export function AuthModal() {
       const finishLinkedinSync = async () => {
         try {
           // Fetch the latest user data to confirm everything is synced
-          const userInfoRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://online-media-tools-server-vercel.vercel.app"}/api/users/${userId}/get_user`, {
+          const userInfoRes = await fetch(`${getApiBaseUrl()}/api/users/${userId}/get_user`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           const userRes = await userInfoRes.json();

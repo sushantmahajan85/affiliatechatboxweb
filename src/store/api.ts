@@ -1,9 +1,10 @@
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({ 
-    baseUrl: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:2200',
+    baseUrl: getApiBaseUrl('http://localhost:8000'),
     prepareHeaders: (headers, { getState }) => {
       const token = (getState() as any).auth.token;
       if (token) {
@@ -12,6 +13,6 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ['User', 'Post', 'Partner', 'Message', 'Notifications'],
+  tagTypes: ['User', 'Post', 'Partner', 'Message', 'Notifications', 'ChatHistory', 'Conversations'],
   endpoints: () => ({}), // Empty endpoints object to be populated by injectEndpoints
 });

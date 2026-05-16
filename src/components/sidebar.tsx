@@ -2,7 +2,6 @@
 import { clsx } from "clsx";
 import {
   Apple,
-  Bell,
   Building2,
   Headset,
   Home,
@@ -32,11 +31,11 @@ const MENU_ITEMS = [
     path: "/directory",
   },
   { icon: Building2, label: "Partners", path: "/partners" },
-  {
-    icon: Bell,
-    label: "Notification Settings",
-    path: "/settings",
-  },
+  // {
+  //   icon: Bell,
+  //   label: "Notification Settings",
+  //   path: "/settings",
+  // },
 ];
 
 interface SidebarProps {

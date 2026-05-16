@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { updateUser, logout } from "@/store/authSlice";
+import { getSocket } from "@/lib/socket";
 
 export function AuthWrapper({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
@@ -19,6 +20,18 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
       dispatch(updateUser(data.user));
     }
   }, [data, dispatch]);
+
+  useEffect(() => {
+    if (userId && token) {
+      const socket = getSocket();
+      socket.connect();
+      socket.emit("user_connected", userId);
+
+      return () => {
+        socket.disconnect();
+      };
+    }
+  }, [userId, token]);
 
   useEffect(() => {
     if (error) {

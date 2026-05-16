@@ -1,0 +1,3 @@
+[build.environment]
+  # Firebase web SDK exposes NEXT_PUBLIC_* keys in bundles; Netlify smart scan treats AIza* as secrets.
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"

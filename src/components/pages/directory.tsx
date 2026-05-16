@@ -1,4 +1,5 @@
 "use client";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useGetAllUsersQuery } from "@/store/endpoints/members";
 import { clsx } from "clsx";
@@ -8,6 +9,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FaGoogle } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
+import { useAppDispatch } from "@/store/hooks";
+import { openConnectionModal } from "@/store/uiSlice";
 
 // Helper to convert country code (e.g., "IN") to flag emoji
 const getFlagEmoji = (countryCode: string) => {
@@ -19,8 +22,44 @@ const getFlagEmoji = (countryCode: string) => {
   return String.fromCodePoint(...codePoints);
 };
 
+import { useAppSelector } from "@/store/hooks";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+
 export function DirectoryPage() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { user: currentUser } = useAppSelector((state) => state.auth);
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
+  
+  const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
+    skip: !currentUser?._id || chatBackendIsFirebase,
+  });
+
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
+  const handleStartChat = (memberId: string, memberLinkedinVerified: boolean) => {
+    if (!currentUser) {
+      // Not logged in, can't chat
+      return;
+    }
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified, currentUser.role === "admin")) {
+      setLinkedinGuardOpen(true);
+      return;
+    }
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === memberId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === memberId));
+    if (hasChat) {
+      router.push(`/chats?userId=${memberId}`);
+    } else {
+      dispatch(openConnectionModal(memberId));
+    }
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 8;
@@ -32,7 +71,7 @@ export function DirectoryPage() {
   const members = rawUsers.map((u: any) => ({
     id: u._id,
     name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "Unnamed User",
-    avatar: u.profileImageUrl || `https://ui-avatars.com/api/?name=${u.firstName || "U"}+${u.lastName || "U"}&background=0A7EA4&color=fff`,
+    avatar: resolveUserProfileImageUrl(u, `${u.firstName || "U"} ${u.lastName || "U"}`),
     country: u.country || "Global",
     // Use helper if it looks like a country code, otherwise use as is
     flag: u.flag?.length === 2 ? getFlagEmoji(u.flag) : (u.flag || "🌐"),
@@ -96,6 +135,7 @@ export function DirectoryPage() {
   };
 
   return (
+    <>
     <div className="flex flex-col gap-6">
       {/* Search Header */}
       <div className="bg-white p-6 rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -130,7 +170,10 @@ export function DirectoryPage() {
               key={member.id} 
               className="bg-white rounded-[14px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col items-center text-center hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all group border border-transparent hover:border-[#F0F7F9]"
             >
-              <div className="relative mb-4">
+              <div 
+                className="relative mb-4 cursor-pointer"
+                onClick={() => router.push(`/profile/${member.id}`)}
+              >
                 <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white ring-2 ring-[#F3F4F6] group-hover:ring-[#0A7EA4]/20 transition-all">
                   <ImageWithFallback src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
                 </div>
@@ -139,8 +182,8 @@ export function DirectoryPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 mb-1">
-                <h3 className="text-[16px] font-bold text-[#1A1A2E] line-clamp-1">{member.name}</h3>
+              <div className="flex items-center gap-1.5 mb-1 cursor-pointer" onClick={() => router.push(`/profile/${member.id}`)}>
+                <h3 className="text-[16px] font-bold text-[#1A1A2E] line-clamp-1 hover:text-[#0A7EA4] transition-colors">{member.name}</h3>
                 <div className="flex items-center gap-1">
                   {member.isGoogleVerified && (
                     <div className="w-4 h-4 rounded-full flex items-center justify-center shadow-sm" title="Google Verified">
@@ -161,7 +204,7 @@ export function DirectoryPage() {
 
               <div className="w-full pt-4 border-t border-[#F3F4F6]">
                 <button 
-                  onClick={() => router.push(`/chats?userId=${member.id}`)}
+                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified)}
                   className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -227,8 +270,8 @@ export function DirectoryPage() {
         </div>
       )}
     </div>
+
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
-
-
-

@@ -1,62 +1,46 @@
 "use client";
-import { useParams } from "next/navigation";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, MessageCircle, Flag, MoreVertical, Share2 } from "lucide-react";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { clsx } from "clsx";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
+import { useParams, useRouter } from "next/navigation";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { useEffect, useState } from "react";
+import {
+  FaFacebookF,
+  FaGoogle,
+  FaLinkedin,
+  FaLinkedinIn,
+  FaTelegramPlane,
+  FaTwitter,
+  FaWhatsapp
+} from "react-icons/fa";
+import {
+  FiArrowLeft,
+  FiCheck,
+  FiCopy,
+  FiFlag,
+  FiMessageCircle,
+  FiMoreVertical,
+  FiShare2,
+  FiX
+} from "react-icons/fi";
+import { toast } from "sonner";
 
-// Mock data (in a real app, this would be fetched based on id)
-const POSTS = [
-  {
-    id: 1,
-    author: "Alex Johnson",
-    time: "Posted now",
-    avatar: "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtYW4lMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDF8fHx8MTc3NDU4NzY5OXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    type: "Buy",
-    content: "Wresure your ROI is trenthen affiliate strategies for both and we wan consend you sure convernang the company's it idea toint.",
-    tags: ["#affiliatemarketing", "#ROI"],
-    isGoogleVerified: true,
-    isLinkedinVerified: true
-  },
-  {
-    id: 2,
-    author: "Alex Johnson",
-    time: "Posted 3d ago",
-    avatar: "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtYW4lMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDF8fHx8MTc3NDU4NzY5OXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    type: "Sell",
-    content: "Maximize your Hilllitmure affiliate products of proven affiliate strategies for just and more minnts in oune community.",
-    tags: ["#affiliatemarketing", "#strategies"],
-    isGoogleVerified: true,
-    isLinkedinVerified: true
-  },
-  {
-    id: 3,
-    author: "Sarah Miller",
-    time: "Posted 1d ago",
-    avatar: "https://images.unsplash.com/photo-1610387694365-19fafcc86d86?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMG9mZmljZSUyMHByb2Zlc3Npb25hbCUyMHdvbWFuJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzc0NjAxMzA3fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    type: "General",
-    content: "Looking for recommendations on the best affiliate networks for high-ticket SaaS products. Any insights?",
-    tags: ["#SaaS", "#AffiliateNetworks"],
-    isGoogleVerified: true,
-    isLinkedinVerified: false
-  },
-  {
-    id: 4,
-    author: "James Wilson",
-    time: "Posted 5h ago",
-    avatar: "https://images.unsplash.com/photo-1742119971773-57e0131095b0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdWNjZXNzZnVsJTIwZW50cmVwcmVuZXVyJTIwbWFuJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzc0NjAxMzA3fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    type: "Buy",
-    content: "I'm interested in buying traffic for finance-related offers in the UK and Canada. DM if you have quality sources.",
-    tags: ["#Traffic", "#FinanceOffers"],
-    isGoogleVerified: false,
-    isLinkedinVerified: true
-  }
-];
 
+
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetPostByIdQuery } from "@/store/endpoints/posts";
+import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
-import { FaGoogle } from "react-icons/fa";
-import { GrLinkedin } from "react-icons/gr";
 
 // Helper to convert country code (e.g., "IN") to flag emoji
 const getFlagEmoji = (countryCode: string) => {
@@ -71,7 +55,49 @@ const getFlagEmoji = (countryCode: string) => {
 export function PostDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  const { isAuthenticated, user: currentUser } = useAppSelector((state) => state.auth);
   const { data, isLoading, error } = useGetPostByIdQuery(id as string);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
+
+  const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
+    skip: !currentUser?._id || chatBackendIsFirebase,
+  });
+
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
+  const handleStartChat = () => {
+    if (!isAuthenticated || !currentUser) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (!data?.post) return;
+
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, data.post.isLinkedinVerified, currentUser.role === "admin")) {
+      setLinkedinGuardOpen(true);
+      return;
+    }
+    
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === data.post.userId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === data.post.userId));
+    if (hasChat) {
+      router.push(`/chats?userId=${data.post.userId}`);
+    } else {
+      dispatch(openConnectionModal(data.post.userId));
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setShareUrl(window.location.href);
+    }
+  }, []);
 
   if (isLoading) {
     return (
@@ -101,7 +127,26 @@ export function PostDetailsPage() {
 
   const post = data.post;
 
+
+const renderContent = (text: string) => {
+  const parts = text.split(/(#\w+)/g);
+
+  return parts.map((part: string, index: number) => {
+    if (part.startsWith("#")) {
+      return (
+        <span key={index} style={{ display: "block" }}>
+          <span style={{ color: "#0a66c2", cursor: "pointer" }}>
+            {part}
+          </span>
+        </span>
+      );
+    }
+    return <span key={index}>{part}</span>;
+  });
+};
+
   return (
+    <>
     <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-[#E0E0E0] flex items-center justify-between">
@@ -109,15 +154,15 @@ export function PostDetailsPage() {
           onClick={() => router.back()}
           className="flex items-center gap-2 text-[#757575] hover:text-[#1A1A2E] transition-colors"
         >
-          <ArrowLeft className="w-5 h-5" />
+          <FiArrowLeft className="w-5 h-5" />
           <span className="font-medium text-[15px]">Back to feed</span>
         </button>
         <div className="flex items-center gap-2">
            <button className="p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors" title="Report">
-            <Flag className="w-5 h-5" />
+            <FiFlag className="w-5 h-5" />
           </button>
           <button className="p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors">
-            <MoreVertical className="w-5 h-5" />
+            <FiMoreVertical className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -126,16 +171,22 @@ export function PostDetailsPage() {
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-full overflow-hidden border border-[#E0E0E0]">
+            <div 
+              className="w-14 h-14 rounded-full overflow-hidden border border-[#E0E0E0] cursor-pointer"
+              onClick={() => router.push(`/profile/${post.userId}`)}
+            >
               <ImageWithFallback 
-                src={post.profileImageUrl || `https://ui-avatars.com/api/?name=${post.userName}&background=0A7EA4&color=fff`} 
+                src={resolveUserProfileImageUrl({ profileImageUrl: post.profileImageUrl }, post.userName)} 
                 alt={post.userName} 
                 className="w-full h-full object-cover" 
               />
             </div>
             <div className="flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="text-[18px] font-bold text-[#1A1A2E]">{post.userName}</span>
+              <div 
+                className="flex items-center gap-2 cursor-pointer group/name"
+                onClick={() => router.push(`/profile/${post.userId}`)}
+              >
+                <span className="text-[18px] font-bold text-[#1A1A2E] group-hover/name:text-[#0A7EA4] transition-colors">{post.userName}</span>
                 <div className="flex items-center gap-1.5 min-w-0">
                     {post.isGoogleVerified && (
                       <div className="w-4 h-4 rounded-full flex items-center justify-center" title="Google Verified">
@@ -144,7 +195,7 @@ export function PostDetailsPage() {
                     )}
                     {post.isLinkedinVerified && (
                       <div className="w-4 h-4 bg-[#0A66C2] rounded-[1px] flex items-center justify-center p-0.5" title="LinkedIn Verified">
-                        <GrLinkedin className="w-full h-full text-white" />
+                        <FaLinkedin className="w-full h-full text-white" />
                       </div>
                     )}
                     <div className="text-[16px] ml-0.5" title={post.flag}>
@@ -169,8 +220,9 @@ export function PostDetailsPage() {
 
         <div className="space-y-4 mb-8">
           <p className="text-[16px] text-[#374151] leading-[1.7] whitespace-pre-wrap">
-            {post.postContent}
+          {renderContent(post.postContent)}
           </p>
+
           
           {post.postDescription && (
              <p className="text-[15px] text-[#4B5563] leading-[1.6] bg-[#F9FAFB] p-4 rounded-xl border border-[#F3F4F6]">
@@ -183,43 +235,149 @@ export function PostDetailsPage() {
               {post.postMediaType?.startsWith("video/") ? (
                 <video src={post.postMediaUrl} controls className="max-w-full max-h-[600px]" />
               ) : (
-                <ImageWithFallback
-                  src={post.postMediaUrl}
-                  alt="Post media"
-                  className="max-w-full max-h-[600px] object-contain"
+                <ImageWithFallback 
+                  src={post.postMediaUrl} 
+                  alt="Post media" 
+                  className="max-w-full max-h-[600px] object-contain" 
+                
                 />
               )}
             </div>
           )}
         </div>
 
-        <div className="flex flex-wrap gap-2 mb-8">
-          {post.tag !== "blank" && (
-            <span className="text-[#0A7EA4] text-[15px] hover:underline cursor-pointer font-medium">
-              #{post.tag}
-            </span>
-          )}
-          <span className="text-[#0A7EA4] text-[15px] hover:underline cursor-pointer">#affiliatemarketing</span>
-          <span className="text-[#0A7EA4] text-[15px] hover:underline cursor-pointer">#networking</span>
-        </div>
 
         {/* Footer Actions */}
         <div className="pt-6 border-t border-[#F3F4F6] flex flex-col sm:flex-row gap-3">
-          <button className="flex-1 flex items-center justify-center gap-2 h-11 bg-[#0A7EA4] text-white rounded-xl text-[15px] font-bold hover:bg-[#086a8a] transition-colors shadow-sm">
-            <MessageCircle className="w-5 h-5" />
+          <button 
+            onClick={handleStartChat}
+            className="flex-1 flex items-center justify-center gap-2 h-11 bg-[#0A7EA4] text-white rounded-xl text-[15px] font-bold hover:bg-[#086a8a] transition-colors shadow-sm"
+          >
+            <FiMessageCircle className="w-5 h-5" />
             <span>Start Chat</span>
           </button>
-          <button className="flex-1 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#3C3C3C] text-[15px] font-medium hover:bg-[#F5F5F5] transition-colors">
-            <Share2 className="w-5 h-5 text-[#6B7280]" />
+          <button 
+            onClick={() => setIsShareModalOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#3C3C3C] text-[15px] font-medium hover:bg-[#F5F5F5] transition-colors"
+          >
+            <FiShare2 className="w-5 h-5 text-[#6B7280]" />
             <span>Share Post</span>
           </button>
           <button className="sm:w-auto px-6 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#EF4444] text-[15px] font-medium hover:bg-[#FEF2F2] transition-colors">
-            <Flag className="w-5 h-5" />
+            <FiFlag className="w-5 h-5" />
             <span className="sm:hidden lg:inline">Report Post</span>
           </button>
         </div>
       </div>
+
+      {/* Share Modal */}
+      <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white border-none rounded-[24px] p-0 overflow-hidden shadow-2xl">
+          <div className="p-6">
+            <DialogHeader className="mb-6">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="text-[20px] font-bold text-[#1A1A2E]">Share Post</DialogTitle>
+                <button 
+                  onClick={() => setIsShareModalOpen(false)}
+                  className="p-2 hover:bg-[#F5F5F5] rounded-full transition-colors"
+                >
+                  <FiX className="w-5 h-5 text-[#757575]" />
+                </button>
+              </div>
+            </DialogHeader>
+
+            <div className="grid grid-cols-4 gap-4 mb-8">
+              {[
+                { 
+                  name: "WhatsApp", 
+                  icon: FaWhatsapp, 
+                  color: "#25D366", 
+                  bg: "#E8FAEF",
+                  href: `https://wa.me/?text=${encodeURIComponent(`${post.postContent}\n\nRead more at: ${shareUrl}`)}`
+                },
+                { 
+                  name: "Facebook", 
+                  icon: FaFacebookF, 
+                  color: "#1877F2", 
+                  bg: "#E8F1FF",
+                  href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`
+                },
+                { 
+                  name: "X", 
+                  icon: FaTwitter, 
+                  color: "#000000", 
+                  bg: "#F5F5F5",
+                  href: `https://twitter.com/intent/tweet?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(post.postContent.substring(0, 100) + "...")}`
+                },
+                { 
+                  name: "LinkedIn", 
+                  icon: FaLinkedinIn, 
+                  color: "#0A66C2", 
+                  bg: "#E6F0F9",
+                  href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`
+                },
+                { 
+                  name: "Telegram", 
+                  icon: FaTelegramPlane, 
+                  color: "#0088CC", 
+                  bg: "#E5F3F9",
+                  href: `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(post.postContent.substring(0, 100) + "...")}`
+                },
+              ].map((platform) => (
+                <a
+                  key={platform.name}
+                  href={platform.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex flex-col items-center gap-2 group cursor-pointer"
+                >
+                  <div 
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-active:scale-95"
+                    style={{ backgroundColor: platform.bg }}
+                  >
+                    <platform.icon className="w-6 h-6" style={{ color: platform.color }} />
+                  </div>
+                  <span className="text-[12px] font-medium text-[#4B5563]">{platform.name}</span>
+                </a>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[13px] font-bold text-[#757575] uppercase tracking-wider">Page Link</label>
+              <div className="flex items-center gap-2 p-1.5 bg-[#F8F9FA] border border-[#E5E7EB] rounded-xl focus-within:border-[#0A7EA4] transition-colors group">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={shareUrl}
+                  className="flex-1 bg-transparent px-3 py-2 text-[14px] text-[#1A1A2E] outline-none"
+                />
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl);
+                    setCopied(true);
+                    toast.success("Link copied to clipboard!");
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className={clsx(
+                    "px-4 py-2 rounded-lg text-[13px] font-bold transition-all flex items-center gap-2",
+                    copied ? "bg-[#10B981] text-white" : "bg-[#0A7EA4] text-white hover:bg-[#086a8a]"
+                  )}
+                >
+                  {copied ? <FiCheck className="w-4 h-4" /> : <FiCopy className="w-4 h-4" />}
+                  <span>{copied ? "Copied" : "Copy"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-[#F8F9FA] px-6 py-4 border-t border-[#E5E7EB] flex items-center justify-between">
+            <span className="text-[13px] text-[#6B7280]">Anyone with this link can view this post.</span>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 

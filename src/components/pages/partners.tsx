@@ -1,87 +1,30 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { clsx } from "clsx";
-import { Building2, ChevronLeft, ChevronRight, Handshake, Mail, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Handshake, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 
-const PARTNERS = [
-  { 
-    id: 1, 
-    name: "Business Company", 
-    type: "Enterprise Solutions", 
-    description: "Enterprise Solutions provider with a focus on scaling businesses globally through innovation.",
-    email: "contact@businessco.com",
-    avatar: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?q=80&w=250",
-    bgColor: "bg-[#374151]",
-    verified: true
-  },
-  { 
-    id: 2, 
-    name: "Alpha Network", 
-    type: "Affiliate Network", 
-    description: "High-performance affiliate network connecting premium brands with top-tier traffic sources.",
-    email: "partners@alphanet.io",
-    avatar: "https://images.unsplash.com/photo-1549737221-bef65e2604a6?q=80&w=250",
-    bgColor: "bg-[#0A7EA4]",
-    verified: true
-  },
-  { 
-    id: 3, 
-    name: "Market Starcor", 
-    type: "Agency", 
-    description: "Full-service digital agency specialized in ROI-driven marketing and content strategy.",
-    email: "info@starcor.de",
-    avatar: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=250",
-    bgColor: "bg-[#7C1A2E]",
-    verified: false
-  },
-  { 
-    id: 4, 
-    name: "Global Reach", 
-    type: "Media Buyer", 
-    description: "Global media buying experts delivering scale across social and native advertising platforms.",
-    email: "support@globalreach.io",
-    avatar: "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=250",
-    bgColor: "bg-[#0A66C2]",
-    verified: true
-  },
-  { 
-    id: 5, 
-    name: "TechFlow Systems", 
-    type: "SaaS Provider", 
-    description: "Next-gen SaaS platforms designed for automation and operational efficiency for modern teams.",
-    email: "sales@techflow.sg",
-    avatar: "https://images.unsplash.com/photo-1554469384-e58fac16e23a?q=80&w=250",
-    bgColor: "bg-[#4B5563]",
-    verified: true
-  },
-  { 
-    id: 6, 
-    name: "Vantage Ads", 
-    type: "Ad Network", 
-    description: "Transparent ad network providing high-quality traffic and advanced targeting for advertisers.",
-    email: "ads@vantage.ae",
-    avatar: "https://images.unsplash.com/photo-1577416416181-f48a86c5f707?q=80&w=250",
-    bgColor: "bg-[#10B981]",
-    verified: true
-  }
-];
+import { useGetPartnersQuery } from "@/store/endpoints/partners";
 
 export function PartnersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  const filteredPartners = PARTNERS.filter(partner => 
-    partner.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    partner.type.toLowerCase().includes(searchQuery.toLowerCase())
+  const { data, isLoading } = useGetPartnersQuery();
+  const PARTNERS = data?.allpartners || [];
+
+  const filteredPartners = PARTNERS?.filter(partner => 
+    partner?.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    partner?.type?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalPages = Math.ceil(filteredPartners.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredPartners?.length / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentPartners = filteredPartners.slice(indexOfFirstItem, indexOfLastItem);
+  const currentPartners = filteredPartners?.slice(indexOfFirstItem, indexOfLastItem);
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,65 +49,62 @@ export function PartnersPage() {
         </div>
       </div>
 
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-20 bg-white rounded-[20px] shadow-sm animate-pulse">
+          <div className="w-12 h-12 border-4 border-[#0A7EA4] border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-[#64748B] font-medium">Fetching partners...</p>
+        </div>
+      )}
+
       {/* Grid of Partner Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AnimatePresence mode="popLayout">
-          {currentPartners.map((partner) => (
-            <motion.div 
-              layout
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              key={partner.id} 
-              className="bg-white rounded-[20px] p-6 shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all group border border-[#F1F5F9] relative overflow-hidden"
-            >
-              {/* Partner Header */}
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex items-center gap-4">
-                  <div className={clsx(
-                    "w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold shrink-0 overflow-hidden shadow-sm",
-                    partner.bgColor
-                  )}>
-                    <ImageWithFallback src={partner.avatar} alt={partner.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="text-[17px] font-bold text-[#1A1A1A]">{partner.name}</h3>
-                      {partner.verified && (
-                        <div className="bg-[#0A7EA4] text-white p-0.5 rounded-full" title="Verified Partner">
-                          <Building2 className="w-3 h-3" />
-                        </div>
-                      )}
+      {!isLoading && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence mode="popLayout">
+            {currentPartners.map((partner) => (
+              <motion.div 
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                key={partner._id} 
+                className="bg-white rounded-[20px] p-2 shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all group border border-[#F1F5F9] relative overflow-hidden"
+              >
+                {/* Partner Header */}
+                <div className="flex items-center justify-between mb-2 w-full">
+                  <div className="flex items-center gap-4 w-100%">
+                    <div className={clsx(
+                      "w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold shrink-0 overflow-hidden shadow-sm bg-[#F1F5F9] "
+                    )}>
+                      <ImageWithFallback src={partner.logo} alt={partner.name} className="w-full h-full object-cover" />
                     </div>
-                    <span className="text-[13px] text-[#0A7EA4] font-medium">{partner.type}</span>
+                    
                   </div>
                 </div>
-              </div>
 
-              {/* Partner Details */}
-              <div className="space-y-4 mb-8">
-                <p className="text-[14px] text-[#64748B] leading-relaxed line-clamp-2">
-                  {partner.description}
-                </p>
-                <div className="flex items-center gap-3 text-[14px] text-[#64748B] pt-1">
-                  <Mail className="w-4 h-4 text-[#CBD5E1]" />
-                  <span className="truncate">{partner.email}</span>
+                {/* Partner Details */}
+                <div className="space-y-4 mb-8 text-center sm:text-left">
+                  <p className="text-[12px] text-[#64748B]  h-[60px]">
+                    {partner.description}
+                  </p>
+                  
                 </div>
-              </div>
 
-              {/* Action Button */}
-              <div className="mt-auto">
-                <button 
-                  className="w-full h-12 bg-[#F8FAFC] text-[#1A1A1A] rounded-xl text-[14px] font-bold hover:bg-[#0A7EA4] hover:text-white transition-all flex items-center justify-center gap-2 border border-[#E2E8F0] hover:border-transparent group/btn shadow-sm active:scale-[0.98]"
-                >
-                  <Handshake className="w-5 h-5 group-hover/btn:animate-pulse" />
-                  <span>Connect Partner</span>
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+                {/* Action Button */}
+                <div className="mt-auto">
+                  <button 
+                    onClick={() => window.open(partner.link, '_blank')}
+                    className="w-full h-10 bg-[#F8FAFC] text-[#1A1A1A] rounded-xl text-[12px] font-bold hover:bg-[#0A7EA4] hover:text-white transition-all flex items-center justify-center gap-2 border border-[#E2E8F0] hover:border-transparent group/btn shadow-sm active:scale-[0.98]"
+                  >
+                    <Handshake className="w-4 h-4 group-hover/btn:animate-pulse" />
+                    <span>{partner.btntext || "Connect Partner"}</span>
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (

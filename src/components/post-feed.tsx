@@ -18,10 +18,15 @@ import {
   usePinPostMutation,
   useUnpinPostMutation
 } from "@/store/endpoints/posts";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { openAuthModal } from "@/store/uiSlice";
+import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
+import { useGetConversationsQuery } from "@/store/endpoints/chats";
+import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { formatDistanceToNow } from "date-fns";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { toast } from "sonner";
@@ -55,9 +60,47 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   // Mutations
   const [pinPost] = usePinPostMutation();
   const [unpinPost] = useUnpinPostMutation();
+  
+  const chatBackendIsFirebase = useChatBackendIsFirebase();
+  const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
+
+  const { data: convData } = useGetConversationsQuery(user?._id || "", {
+    skip: !user?._id || chatBackendIsFirebase,
+  });
+
+  const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+
+  const handleStartChat = (e: React.MouseEvent, postUserId: string, authorLinkedinVerified?: boolean) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (isLinkedinOnlyChatBlocked(user?.isLinkedinVerified, authorLinkedinVerified, user?.role === "admin")) {
+      setLinkedinGuardOpen(true);
+      return;
+    }
+    const hasChat = chatBackendIsFirebase
+      ? firebaseRooms.some((r) => r.partnerId === postUserId && r.isRequested === "accepted")
+      : Boolean(convData?.conversations?.some((c) => c.id === postUserId));
+    if (hasChat) {
+      router.push(`/chats?userId=${postUserId}`);
+    } else {
+      dispatch(openConnectionModal(postUserId));
+    }
+  };
 
   const currentQuery = activeTab === "all" ? allPostsQuery : myPostsQuery;
-  const posts = currentQuery.data?.posts || [];
+  const rawPosts = currentQuery.data?.posts || [];
+  
+  const posts = useMemo(() => {
+    if (activeTab === "all") {
+        return rawPosts.filter((p: any) => p.isApproved === true);
+    }
+    // For 'my' tab, we show everything from the user query
+    return rawPosts;
+  }, [rawPosts, activeTab]);
+
   const isLoading = currentQuery.isLoading;
   const error = currentQuery.error;
 
@@ -128,6 +171,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   }
 
   return (
+    <>
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {posts.map((post: any) => {
@@ -144,16 +188,22 @@ export function PostFeed({ activeTab }: PostFeedProps) {
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-full overflow-hidden shrink-0 border border-[#E0E0E0]">
+                  <div 
+                    className="w-11 h-11 rounded-full overflow-hidden shrink-0 border border-[#E0E0E0] cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
+                  >
                     <ImageWithFallback 
-                      src={post.profileImageUrl || `https://ui-avatars.com/api/?name=${post.userName}&background=0A7EA4&color=fff`} 
+                      src={resolveUserProfileImageUrl({ profileImageUrl: post.profileImageUrl }, post.userName)} 
                       alt={post.userName} 
                       className="w-full h-full object-cover" 
                     />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-[14px] font-bold text-[#1A1A2E] truncate">{post.userName}</span>
+                    <div 
+                      className="flex items-center gap-1.5 min-w-0 cursor-pointer group/name"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
+                    >
+                      <span className="text-[14px] font-bold text-[#1A1A2E] truncate group-hover/name:text-[#0A7EA4] transition-colors">{post.userName}</span>
                       <div className="flex items-center gap-1.5 shrink-0">
                         {post.isGoogleVerified && (
                           <div className="w-3.5 h-3.5 rounded-full flex items-center justify-center" title="Google Verified">
@@ -205,7 +255,10 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem className="cursor-pointer">
+                      <DropdownMenuItem 
+                        onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
+                        className="cursor-pointer"
+                      >
                         View Profile
                       </DropdownMenuItem>
                       <DropdownMenuItem 
@@ -231,19 +284,9 @@ export function PostFeed({ activeTab }: PostFeedProps) {
               <p className="text-[14px] text-[#374151] leading-[1.6] mb-3 flex-1 line-clamp-3">
                 {post.postContent}
               </p>
-
-              <div className="flex flex-wrap gap-1.5 mb-4">
-                {post.tag !== "blank" && (
-                  <span className="text-[#0A7EA4] text-[13px] hover:underline cursor-pointer font-medium">
-                    #{post.tag}
-                  </span>
-                )}
-                <span className="text-[#0A7EA4] text-[13px] hover:underline cursor-pointer">#affiliatemarketing</span>
-              </div>
-
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
                 <button 
-                  onClick={(e) => { e.stopPropagation(); !isAuthenticated && dispatch(openAuthModal()); }}
+                  onClick={(e) => handleStartChat(e, post.userId, post.isLinkedinVerified)}
                   className="flex-1 flex items-center justify-center gap-2 h-9 bg-[#0A7EA4] border border-[#0A7EA4] rounded-lg text-white text-[12px] font-medium hover:bg-[#086a8a] transition-colors shadow-sm"
                 >
                   <MessageCircle className="w-4 h-4 text-white" />
@@ -269,6 +312,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
         )}
       </div>
     </div>
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    </>
   );
 }
 

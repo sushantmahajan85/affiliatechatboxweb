@@ -1,23 +1,25 @@
 "use client";
-import { ReactNode } from "react";
-import { Sidebar } from "./sidebar";
-import { Header } from "./header";
-import { PartnersSidebar } from "./partners-sidebar";
-import { MessagingOverlay } from "./messaging-overlay";
-import { AuthModal } from "./auth-modal";
-import { useState } from "react";
 import { useAppSelector } from "@/store/hooks";
+import { ReactNode, useState } from "react";
+import { AuthModal } from "./auth-modal";
+import { Header } from "./header";
+import { MessagingOverlay } from "./messaging-overlay";
+import { PartnersSidebar } from "./partners-sidebar";
+import { Sidebar } from "./sidebar";
+import { ConnectionRequestModal } from "./connection-request-modal";
+import { DesktopNotificationBridge } from "./desktop-notification-bridge";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPartnersOpen, setIsPartnersOpen] = useState(false);
-  const [activeChats, setActiveChats] = useState<any[]>([]);
+  
+  const activeChats = useAppSelector((state) => state.chat.activeChats);
 
   const { isAuthenticated, user } = useAppSelector((state) => state.auth);
   const isLinkedInVerified = user?.isLinkedinVerified || false;
+  const isAdmin = user?.role === "admin";
 
-  // Chat is hidden for Guests and users who are NOT LinkedIn verified
-  const showChat = isAuthenticated && isLinkedInVerified;
+  const showChat = isAuthenticated && (isLinkedInVerified || isAdmin);
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] font-sans text-[#1A1A2E] overflow-hidden">
@@ -41,21 +43,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
           
           <PartnersSidebar 
-            isOpen={isPartnersOpen} 
-            onClose={() => setIsPartnersOpen(false)} 
-            activeChats={activeChats}
-            setActiveChats={setActiveChats}
-          />
+            isOpen={isPartnersOpen}
+            onClose={() => setIsPartnersOpen(false)} activeChats={[]} setActiveChats={function (chats: any[]): void {
+              throw new Error("Function not implemented.");
+            } }          />
 
           {/* Messaging Windows & Bar - Floating outside sidebar clipping */}
           {showChat && (
-            <MessagingOverlay 
-              activeChats={activeChats} 
-              setActiveChats={setActiveChats} 
-            />
+            <MessagingOverlay />
           )}
 
           <AuthModal />
+          <ConnectionRequestModal />
+          {isAuthenticated && <DesktopNotificationBridge />}
 
           {/* Mobile Overlays */}
           {isSidebarOpen && (

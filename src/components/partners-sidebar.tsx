@@ -3,31 +3,9 @@ import { clsx } from "clsx";
 import { ChevronRight, Handshake, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { useGetPartnersQuery } from "@/store/endpoints/partners";
+import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 
-const PARTNERS = [
-  {
-    name: "Business Company",
-    type: "Enterprise Solutions",
-    description: "Enterprise Solutions provider focused on scaling businesses globally.",
-    icon: "building",
-    bgColor: "bg-[#374151]",
-  },
-  {
-    name: "Alpha Network",
-    type: "Affiliate Network",
-    description: "High-performance affiliate network connecting premium brands.",
-    initials: "AN",
-    bgColor: "bg-[#0A7EA4]",
-  },
-  {
-    name: "Market Starcor",
-    type: "Agency",
-    description: "Full-service digital agency specialized in ROI-driven marketing.",
-    initials: "MS",
-    bgColor: "bg-[#7C1A2E]",
-  },
-  
-];
 
 const RECENT_CHATS = [
   { name: "John Doe", status: "online", lastMsg: "Hey, check the Q4 stats!", avatar: "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtYW4lMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDF8fHx8MTc3NDU4NzY5OXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral" },
@@ -47,6 +25,9 @@ export function PartnersSidebar({ isOpen, onClose, activeChats, setActiveChats }
   const pathname = usePathname();
 
   const isHomePage = pathname === "/";
+
+  const { data, isLoading } = useGetPartnersQuery();
+  const partners = data?.allpartners?.slice(0, 5) || [];
 
   return (
     <aside className={clsx(
@@ -82,43 +63,56 @@ export function PartnersSidebar({ isOpen, onClose, activeChats, setActiveChats }
             </button>
           </div>
           <div className="space-y-6">
-            {PARTNERS.map((partner, index) => (
-              <div key={index} className="flex flex-col gap-3">
-                <div className="flex items-start gap-3">
-                  <div className={clsx(
-                    "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shrink-0 overflow-hidden shadow-sm",
-                    partner.bgColor
-                  )}>
-                    {partner.icon === "building" && (
-                      <svg viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                        <path d="M19 21V5c0-1.1-.9-2-2-2H7c-1.1 0-2 .9-2 2v16h14zM9 19H7v-2h2v2zm0-4H7v-2h2v2zm0-4H7V9h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V9h2v2zm4 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V9h2v2z" />
-                      </svg>
-                    )}
-                    {/* {partner.icon === "linkedin" && <Linkedin className="w-5 h-5 fill-current" />} */}
-                    {partner.initials}
+            {isLoading ? (
+              // Loading Skeleton
+              [1, 2, 3].map((i) => (
+                <div key={i} className="flex flex-col gap-3 animate-pulse">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gray-200 shrink-0" />
+                    <div className="flex flex-col gap-2 flex-1">
+                      <div className="h-4 bg-gray-200 rounded w-3/4" />
+                      <div className="h-3 bg-gray-200 rounded w-1/2" />
+                    </div>
                   </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-[14px] font-extrabold text-[#1A1A2E] truncate">{partner.name}</span>
-                    <span className="text-[11px] text-[#0A7EA4] font-bold uppercase tracking-wider">{partner.type}</span>
-                  </div>
+                  <div className="h-10 bg-gray-200 rounded w-full" />
                 </div>
-                
-                <p className="text-[12px] text-[#64748B] leading-relaxed line-clamp-2 px-1">
-                  {partner.description}
-                </p>
+              ))
+            ) : (
+              partners.map((partner, index) => (
+                <div key={partner._id || index} className="flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className={clsx(
+                      "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shrink-0 overflow-hidden shadow-sm bg-[#F1F5F9]"
+                    )}>
+                      <ImageWithFallback src={partner.logo} alt={partner.name} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-[14px] font-extrabold text-[#1A1A2E] truncate">{partner.name}</span>
+                      <span className="text-[11px] text-[#0A7EA4] font-bold uppercase tracking-wider">{partner.type}</span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-[12px] text-[#64748B] leading-relaxed line-clamp-2 px-1">
+                    {partner.description}
+                  </p>
 
-                <button 
-                  onClick={() => {
-                    router.push("/partners");
-                    if (window.innerWidth < 1280) onClose?.();
-                  }}
-                  className="w-full h-9 bg-[#F8FAFC] text-[#1A1A2E] rounded-lg text-[12px] font-bold hover:bg-[#0A7EA4] hover:text-white transition-all flex items-center justify-center gap-2 border border-[#E2E8F0] hover:border-transparent group/btn active:scale-[0.98]"
-                >
-                  <Handshake className="w-4 h-4 group-hover/btn:animate-pulse" />
-                  <span>Connect</span>
-                </button>
-              </div>
-            ))}
+                  <button 
+                    onClick={() => {
+                      if (partner.link) {
+                        window.open(partner.link, '_blank');
+                      } else {
+                        router.push("/partners");
+                      }
+                      if (window.innerWidth < 1280) onClose?.();
+                    }}
+                    className="w-full h-9 bg-[#F8FAFC] text-[#1A1A2E] rounded-lg text-[12px] font-bold hover:bg-[#0A7EA4] hover:text-white transition-all flex items-center justify-center gap-2 border border-[#E2E8F0] hover:border-transparent group/btn active:scale-[0.98]"
+                  >
+                    <Handshake className="w-4 h-4 group-hover/btn:animate-pulse" />
+                    <span>{partner.btntext || "Connect"}</span>
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

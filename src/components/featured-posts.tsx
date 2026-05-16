@@ -20,6 +20,7 @@ import {
 import { useGetPinnedPostsQuery, useUnpinPostMutation } from "@/store/endpoints/posts";
 import { useAppSelector } from "@/store/hooks";
 import { formatDistanceToNow } from "date-fns";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { FaGoogle, FaThumbtack } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { toast } from "sonner";
@@ -91,7 +92,7 @@ export function FeaturedPosts() {
           const originalId = post.postId?._id || post.postId || post._id;
           const content = post.postContent;
           const userName = post.userName;
-          const profilePic = post.profileImageUrl;
+          const profilePic = resolveUserProfileImageUrl({ profileImageUrl: post.profileImageUrl }, userName);
           const tag = post.postId?.tag || post.tag;
 
           return (
@@ -104,7 +105,7 @@ export function FeaturedPosts() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full overflow-hidden border border-[#E0E0E0]">
                       <ImageWithFallback 
-                        src={profilePic || `https://ui-avatars.com/api/?name=${userName}&background=0A7EA4&color=fff`} 
+                        src={profilePic} 
                         alt={userName} 
                         className="w-full h-full object-cover" 
                       />
