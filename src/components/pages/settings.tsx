@@ -2,7 +2,7 @@
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   browserNotificationsSupported,
   getDesktopChatNotificationsEnabled,
@@ -14,22 +14,14 @@ import {
 import { getFirebaseWebVapidKey, syncWebFcmTokenToServer } from "@/lib/fcm-web";
 import { useAppSelector } from "@/store/hooks";
 
-export function SettingsPage() {
-  const router = useRouter();
-  const { userId: authUserId, user, token } = useAppSelector((s) => s.auth);
-  const uid = authUserId || user?._id || "";
-  const [pushMaster, setPushMaster] = useState(false);
-  const [chatEnabled, setChatEnabled] = useState(true);
-  const [emailEnabled, setEmailEnabled] = useState(true);
-  const [permLabel, setPermLabel] = useState<string | null>(null);
+type SettingsToggleProps = {
+  enabled: boolean;
+  setEnabled: (v: boolean) => void;
+};
 
-  useEffect(() => {
-    setPushMaster(getDesktopPushMasterEnabled());
-    setChatEnabled(getDesktopChatNotificationsEnabled());
-  }, []);
-
-  const Toggle = ({ enabled, setEnabled }: { enabled: boolean; setEnabled: (v: boolean) => void }) => (
-    <button 
+function SettingsToggle({ enabled, setEnabled }: SettingsToggleProps) {
+  return (
+    <button
       type="button"
       onClick={() => setEnabled(!enabled)}
       className={`relative w-[48px] h-[24px] rounded-full transition-colors duration-200 outline-none ${
@@ -43,6 +35,18 @@ export function SettingsPage() {
       />
     </button>
   );
+}
+
+export function SettingsPage() {
+  const router = useRouter();
+  const { userId: authUserId, user, token } = useAppSelector((s) => s.auth);
+  const uid = authUserId || user?._id || "";
+  const [pushMaster, setPushMaster] = useState(() => getDesktopPushMasterEnabled());
+  const [chatEnabled, setChatEnabled] = useState(() =>
+    getDesktopChatNotificationsEnabled()
+  );
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [permLabel, setPermLabel] = useState<string | null>(null);
 
   const onPushMasterChange = useCallback(async (next: boolean) => {
     if (next) {
@@ -115,10 +119,10 @@ export function SettingsPage() {
               <span className="text-[12px] text-amber-700 mt-1">{permLabel}</span>
             )}
           </div>
-          <Toggle enabled={pushMaster} setEnabled={onPushMasterChange} />
+          <SettingsToggle enabled={pushMaster} setEnabled={onPushMasterChange} />
         </div>
 
-        <div className="h-[1px] bg-[#EEEEEE] mx-5" />
+        <div className="h-1px bg-[#EEEEEE] mx-5" />
 
         {/* Chat Notifications Row */}
         <div className="flex items-center justify-between px-5 py-[22px]">
@@ -128,13 +132,10 @@ export function SettingsPage() {
               Desktop alerts for new unread messages
             </span>
           </div>
-          <Toggle
-            enabled={chatEnabled}
-            setEnabled={(v) => onChatToggle(v)}
-          />
+          <SettingsToggle enabled={chatEnabled} setEnabled={onChatToggle} />
         </div>
 
-        <div className="h-[1px] bg-[#EEEEEE] mx-5" />
+        <div className="h-1px bg-[#EEEEEE] mx-5" />
 
         {/* Email Notifications Row */}
         <div className="flex items-center justify-between px-5 py-[22px]">
@@ -144,7 +145,7 @@ export function SettingsPage() {
               Receive emails about chat requests and new posts
             </span>
           </div>
-          <Toggle enabled={emailEnabled} setEnabled={setEmailEnabled} />
+          <SettingsToggle enabled={emailEnabled} setEnabled={setEmailEnabled} />
         </div>
 
         <div className="h-[1px] bg-[#EEEEEE] mx-5" />

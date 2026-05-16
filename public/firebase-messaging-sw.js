@@ -7,13 +7,13 @@ importScripts(
 );
 
 firebase.initializeApp({
-  apiKey: "AIzaSyBRcZs3nv3uHLH1LdN5Vp3dO2JUpA2LL3o",
-  appId: "1:603565223533:web:a0e1224d476bd339b21964",
-  messagingSenderId: "603565223533",
-  projectId: "omd-app-76987",
-  authDomain: "omd-app-76987.firebaseapp.com",
-  storageBucket: "omd-app-76987.appspot.com",
-  measurementId: "G-NJRYJWECRX",
+  "apiKey": "AIzaSyBRcZs3nv3uHLH1LdN5Vp3dO2JUpA2LL3o",
+  "appId": "1:603565223533:web:a0e1224d476bd339b21964",
+  "messagingSenderId": "603565223533",
+  "projectId": "omd-app-76987",
+  "authDomain": "omd-app-76987.firebaseapp.com",
+  "storageBucket": "omd-app-76987.appspot.com",
+  "measurementId": "G-NJRYJWECRX"
 });
 
 const messaging = firebase.messaging();
@@ -22,7 +22,8 @@ messaging.onBackgroundMessage(function (payload) {
   var title =
     (payload.notification && payload.notification.title) ||
     "Affiliate Chat Box";
-  var body = (payload.notification && payload.notification.body) || "";
+  var body =
+    (payload.notification && payload.notification.body) || "";
   var data = payload.data || {};
   var origin = self.location.origin || "https://affiliatechatbox.com";
   var url = origin + "/notifications";

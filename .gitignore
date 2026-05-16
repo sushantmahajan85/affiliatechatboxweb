@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# generated from NEXT_PUBLIC_FIREBASE_* (see scripts/generate-firebase-messaging-sw.mjs)
+/public/firebase-messaging-sw.js
+
 # production
 /build
 
