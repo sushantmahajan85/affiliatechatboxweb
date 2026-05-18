@@ -29,6 +29,51 @@ export const authApi = api.injectEndpoints({
         method: 'POST',
         body,
       }),
+      invalidatesTags: ['User'],
+    }),
+    googleVerify: builder.mutation<
+      any,
+      {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+        mobileNumber?: string;
+        googleProfileImageUrl?: string;
+      }
+    >({
+      query: (body) => ({
+        url: '/api/auth/google-verify',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['User'],
+    }),
+    verifyPhoneOtp: builder.mutation<
+      any,
+      { mobileNumber: string; userOTP: string }
+    >({
+      query: (body) => ({
+        url: "/api/auth/verify_otp",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["User"],
+    }),
+    sendPhoneOtp: builder.mutation<any, { mobileNumber: string }>({
+      query: (body) => ({
+        url: "/api/auth/send-phone-otp",
+        method: "POST",
+        body,
+      }),
+    }),
+    firebasePhoneVerify: builder.mutation<any, { firebaseIdToken: string }>({
+      query: (body) => ({
+        url: "/api/auth/firebase-phone-verify",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["User"],
     }),
     registerUser: builder.mutation<any, { userId: string; data: FormData }>({
       query: ({ userId, data }) => ({
@@ -50,6 +95,10 @@ export const {
   useLinkedinLoginMutation,
   useMobileContactMutation,
   useVerifyUserMutation,
+  useGoogleVerifyMutation,
+  useSendPhoneOtpMutation,
+  useVerifyPhoneOtpMutation,
+  useFirebasePhoneVerifyMutation,
   useRegisterUserMutation,
   useGetProfileQuery,
 } = authApi;

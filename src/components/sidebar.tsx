@@ -17,8 +17,16 @@ import Link from "next/link";
 import { useState } from "react";
 
 import googlePlayQr from "@/imports/qr-code-google-playstore.png";
+import appStoreQr from "@/imports/qr-code-appstore.png";
 import { usePathname, useRouter } from "next/navigation";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 const MENU_ITEMS = [
   { icon: Home, label: "Home", path: "/" },
@@ -48,6 +56,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [showAppQrModal, setShowAppQrModal] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const dispatch = useAppDispatch();
@@ -134,13 +143,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           {/* Download App Section - Hidden when collapsed */}
           {!isCollapsed && (
-            <div className="mx-4 mt-8 mb-4 p-4 bg-[#F5F0FA] rounded-2xl border border-[#E0D9F0] overflow-hidden">
-              <p className="text-[13px] font-bold text-[#1A1A2E] mb-3 whitespace-nowrap">
+            <button
+              type="button"
+              onClick={() => setShowAppQrModal(true)}
+              className="mx-4 mt-8 mb-4 w-[calc(100%-2rem)] p-4 bg-[#F5F0FA] rounded-2xl border border-[#E0D9F0] overflow-hidden text-left hover:border-[#0A7EA4] hover:shadow-md transition-all cursor-pointer group"
+            >
+              <p className="text-[13px] font-bold text-[#1A1A2E] mb-3 whitespace-nowrap group-hover:text-[#0A7EA4] transition-colors">
                 Download Mobile App
               </p>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 pointer-events-none">
                 <div className="flex flex-col gap-2">
-                  <div className="bg-white p-2 rounded-xl border border-[#E0D9F0] aspect-square flex items-center justify-center overflow-hidden hover:border-[#0A7EA4] transition-colors cursor-pointer shadow-sm">
+                  <div className="bg-white p-2 rounded-xl border border-[#E0D9F0] aspect-square flex items-center justify-center overflow-hidden shadow-sm">
                     <ImageWithFallback
                       src={googlePlayQr.src}
                       alt="Google Play QR Code"
@@ -155,9 +168,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <div className="bg-white p-2 rounded-xl border border-[#E0D9F0] aspect-square flex items-center justify-center overflow-hidden hover:border-[#0A7EA4] transition-colors cursor-pointer shadow-sm">
+                  <div className="bg-white p-2 rounded-xl border border-[#E0D9F0] aspect-square flex items-center justify-center overflow-hidden shadow-sm">
                     <ImageWithFallback
-                      src={googlePlayQr.src}
+                      src={appStoreQr.src}
                       alt="App Store QR Code"
                       className="w-full h-full object-contain"
                     />
@@ -170,7 +183,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   </div>
                 </div>
               </div>
-            </div>
+              <p className="text-[10px] text-[#757575] mt-3 text-center">Tap to enlarge QR codes</p>
+            </button>
           )}
         </nav>
 
@@ -189,6 +203,69 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
       </aside>
+
+      <Dialog open={showAppQrModal} onOpenChange={setShowAppQrModal}>
+        <DialogContent className="sm:max-w-[640px] p-0 gap-0 overflow-hidden border-[#E0D9F0] bg-white">
+          <DialogHeader className="px-6 pt-6 pb-4 text-center sm:text-center border-b border-[#F0F0F0] bg-[#F5F0FA]">
+            <DialogTitle className="text-xl font-bold text-[#1A1A2E]">
+              Download Mobile App
+            </DialogTitle>
+            <DialogDescription className="text-sm text-[#757575] mt-1">
+              Open your phone camera and scan the code for your platform
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-6 sm:p-8 grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#E8F5E9] border border-[#C8E6C9]">
+                <Smartphone className="w-4 h-4 text-[#2E7D32]" />
+                <span className="text-sm font-bold text-[#1B5E20]">Android</span>
+              </div>
+              <div className="relative w-full max-w-[220px] aspect-square bg-white rounded-2xl border-2 border-[#E0D9F0] p-4 shadow-lg">
+                <span className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-[#0A7EA4] rounded-tl-sm" />
+                <span className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-[#0A7EA4] rounded-tr-sm" />
+                <span className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-[#0A7EA4] rounded-bl-sm" />
+                <span className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-[#0A7EA4] rounded-br-sm" />
+                <ImageWithFallback
+                  src={googlePlayQr.src}
+                  alt="Google Play QR Code"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <p className="text-xs text-[#757575] text-center leading-relaxed">
+                Scan to download from Google Play
+              </p>
+            </div>
+
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#F5F5F5] border border-[#E0E0E0]">
+                <Apple className="w-4 h-4 text-[#1A1A2E]" />
+                <span className="text-sm font-bold text-[#1A1A2E]">iOS</span>
+              </div>
+              <div className="relative w-full max-w-[220px] aspect-square bg-white rounded-2xl border-2 border-[#E0D9F0] p-4 shadow-lg">
+                <span className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-[#0A7EA4] rounded-tl-sm" />
+                <span className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-[#0A7EA4] rounded-tr-sm" />
+                <span className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-[#0A7EA4] rounded-bl-sm" />
+                <span className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-[#0A7EA4] rounded-br-sm" />
+                <ImageWithFallback
+                  src={appStoreQr.src}
+                  alt="App Store QR Code"
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <p className="text-xs text-[#757575] text-center leading-relaxed">
+                Scan to download from the App Store
+              </p>
+            </div>
+          </div>
+
+          <div className="px-6 py-4 bg-[#FAFAFA] border-t border-[#F0F0F0] text-center">
+            <p className="text-xs text-[#9E9E9E]">
+              Hold your phone steady · Good lighting helps the scan succeed faster
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

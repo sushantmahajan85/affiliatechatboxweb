@@ -1,8 +1,36 @@
 "use client";
 import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { useGetProfileQuery, useRegisterUserMutation } from "@/store/endpoints/auth";
+import {
+  useFirebasePhoneVerifyMutation,
+  useGetProfileQuery,
+  useRegisterUserMutation,
+  useGoogleVerifyMutation,
+  useVerifyUserMutation,
+} from "@/store/endpoints/auth";
+import { isFirebaseConfigured } from "@/lib/firebase-app";
+import {
+  confirmFirebasePhoneOtp,
+  FIREBASE_PHONE_RECAPTCHA_ID,
+  firebasePhoneAuthErrorMessage,
+  getFirebasePhoneAuthIdToken,
+  resetPhoneRecaptcha,
+  sendFirebasePhoneOtp,
+} from "@/lib/firebase-phone-auth";
+import { setCredentials } from "@/store/authSlice";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
+import { getApiBaseUrl } from "@/lib/api-base-url";
+import { useGoogleLogin } from "@react-oauth/google";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
@@ -34,6 +62,38 @@ import {
 } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+
+const PHONE_COUNTRY_DIAL_OPTIONS = [
+  { dial: "91", label: "India +91" },
+  { dial: "1", label: "US / CA +1" },
+  { dial: "44", label: "UK +44" },
+  { dial: "61", label: "Australia +61" },
+  { dial: "971", label: "UAE +971" },
+  { dial: "966", label: "Saudi +966" },
+  { dial: "880", label: "Bangladesh +880" },
+] as const;
+
+const DEFAULT_PHONE_DIAL = String(
+  process.env.NEXT_PUBLIC_PHONE_DEFAULT_DIAL || "91"
+).replace(/\D/g, "") || "91";
+
+function splitStoredMobileForCountryInputs(
+  fullDigits: string,
+  defaultDial: string
+): { dial: string; national: string } {
+  const raw = fullDigits.replace(/\D/g, "");
+  if (!raw) return { dial: defaultDial, national: "" };
+  const sorted = [...PHONE_COUNTRY_DIAL_OPTIONS].sort(
+    (a, b) => b.dial.length - a.dial.length
+  );
+  for (const o of sorted) {
+    if (raw.startsWith(o.dial) && raw.length > o.dial.length) {
+      return { dial: o.dial, national: raw.slice(o.dial.length) };
+    }
+  }
+  if (raw.length === 10) return { dial: defaultDial, national: raw };
+  return { dial: defaultDial, national: raw };
+}
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
@@ -83,6 +143,158 @@ export function ProfilePage({ id }: { id?: string }) {
   });
 
   const [updateProfile, { isLoading: isUpdating }] = useRegisterUserMutation();
+  const [googleVerifyMutate, { isLoading: isGoogleVerifying }] = useGoogleVerifyMutation();
+  const [firebasePhoneVerifyMutate] = useFirebasePhoneVerifyMutation();
+  const [verifyUserMutate] = useVerifyUserMutation();
+  const [mobileVerifyOpen, setMobileVerifyOpen] = useState(false);
+  const [mobileVerifyStep, setMobileVerifyStep] = useState<"phone" | "otp">("phone");
+  const [phoneCountryDial, setPhoneCountryDial] = useState(DEFAULT_PHONE_DIAL);
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState("");
+  const [mobileOtpInput, setMobileOtpInput] = useState("");
+  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
+  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
+  const [firebaseVerificationId, setFirebaseVerificationId] = useState<string | null>(null);
+
+  const normalizedMobileDialogDigits = (): string => {
+    const national = phoneNationalNumber.replace(/\D/g, "").replace(/^0+/, "");
+    const cc = phoneCountryDial.replace(/\D/g, "");
+    if (!national) return "";
+    return `+${cc}${national}`;
+  };
+
+  const apiErrorMessage = (err: unknown, fallback: string): string => {
+    const e = err as { data?: { message?: string } };
+    return e.data?.message || fallback;
+  };
+
+  const resetMobileDialog = (): void => {
+    setMobileVerifyStep("phone");
+    setMobileOtpInput("");
+    setPhoneNationalNumber("");
+    setPhoneCountryDial(DEFAULT_PHONE_DIAL);
+    setFirebaseVerificationId(null);
+    resetPhoneRecaptcha();
+  };
+
+  const openMobileVerifyDialog = (): void => {
+    if (!isFirebaseConfigured()) {
+      toast.error("Firebase is not configured. Check NEXT_PUBLIC_FIREBASE_* in .env.local.");
+      return;
+    }
+    const u = data?.user;
+    const raw = u?.mobileNumber ? String(u.mobileNumber).replace(/\D/g, "") : "";
+    const { dial, national } = splitStoredMobileForCountryInputs(raw, DEFAULT_PHONE_DIAL);
+    setPhoneCountryDial(dial);
+    setPhoneNationalNumber(national);
+    setMobileOtpInput("");
+    setFirebaseVerificationId(null);
+    setMobileVerifyStep("phone");
+    setMobileVerifyOpen(true);
+  };
+
+  /** Same as Android: Firebase proves OTP → Mongo user updated via API. */
+  const syncVerifiedPhoneToBackend = async () => {
+    try {
+      const firebaseIdToken = await getFirebasePhoneAuthIdToken();
+      return await firebasePhoneVerifyMutate({ firebaseIdToken }).unwrap();
+    } catch {
+      const e164 = normalizedMobileDialogDigits();
+      const digits = e164.replace(/\D/g, "");
+      return await verifyUserMutate({ mobileNumber: digits ? `+${digits}` : e164 }).unwrap();
+    }
+  };
+
+  const handleSendPhoneOtp = async (): Promise<void> => {
+    const e164 = normalizedMobileDialogDigits();
+    const nationalLen = phoneNationalNumber.replace(/\D/g, "").length;
+    if (!e164 || nationalLen < 6) {
+      toast.error("Enter a valid mobile number.");
+      return;
+    }
+    setIsSendingPhoneOtp(true);
+    toast.message("Complete the security check below", {
+      description: "Tick “I’m not a robot”, then SMS will be sent automatically.",
+      duration: 8000,
+    });
+    try {
+      const verificationId = await sendFirebasePhoneOtp(e164);
+      setFirebaseVerificationId(verificationId);
+      setMobileVerifyStep("otp");
+      toast.success("Verification code sent (same Firebase SMS as the app).");
+    } catch (err: unknown) {
+      toast.error(firebasePhoneAuthErrorMessage(err));
+    } finally {
+      setIsSendingPhoneOtp(false);
+    }
+  };
+
+  const handleVerifyPhoneOtpSubmit = async (): Promise<void> => {
+    const code = mobileOtpInput.replace(/\D/g, "");
+    if (!/^\d{6}$/.test(code)) {
+      toast.error("Enter the 6-digit code.");
+      return;
+    }
+    if (!firebaseVerificationId) {
+      toast.error("Session expired. Request a new code.");
+      setMobileVerifyStep("phone");
+      return;
+    }
+    setIsVerifyingPhoneOtp(true);
+    try {
+      await confirmFirebasePhoneOtp(firebaseVerificationId, code);
+      const response = await syncVerifiedPhoneToBackend();
+      dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
+      refetch();
+      toast.success("Mobile verified.");
+      setMobileVerifyOpen(false);
+      resetMobileDialog();
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, firebasePhoneAuthErrorMessage(err)));
+    } finally {
+      setIsVerifyingPhoneOtp(false);
+    }
+  };
+
+  const handleResendPhoneOtp = async (): Promise<void> => {
+    setMobileVerifyStep("phone");
+    setFirebaseVerificationId(null);
+    setMobileOtpInput("");
+    await new Promise((r) => setTimeout(r, 200));
+    await handleSendPhoneOtp();
+  };
+
+  const promptGoogleVerification = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      if (!currentUserId) return;
+      try {
+        const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+          headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+        });
+        const userInfo = await userInfoRes.json();
+        const digits = String(viewerUser?.mobileNumber || "").replace(/\D/g, "");
+        const response = await googleVerifyMutate({
+          id: String(currentUserId),
+          email: userInfo.email,
+          firstName: userInfo.given_name,
+          lastName: userInfo.family_name || " ",
+          ...(digits ? { mobileNumber: digits } : {}),
+          googleProfileImageUrl:
+            typeof userInfo.picture === "string" ? userInfo.picture : "",
+        }).unwrap();
+        dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
+        refetch();
+        toast.success("Google verification completed.");
+      } catch (err: unknown) {
+        const e = err as { data?: { message?: string } };
+        toast.error(e?.data?.message || "Google verification failed.");
+      }
+    },
+    onError: () => toast.error("Google sign-in was cancelled or failed."),
+  });
+
+  const startLinkedinVerification = (): void => {
+    window.location.href = `${getApiBaseUrl()}/auth/linkedin?t=${Date.now()}`;
+  };
 
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
@@ -192,6 +404,29 @@ export function ProfilePage({ id }: { id?: string }) {
       reader.readAsDataURL(file);
     }
   };
+
+  const canVerifyFromHere = isOwnProfile && Boolean(currentUserId);
+  const googleRowActive = canVerifyFromHere && !profile.googleVerified;
+  const linkedinRowActive = canVerifyFromHere && !profile.linkedinVerified;
+  const mobileRowActive = canVerifyFromHere && !profile.otpVerified;
+
+  const googlePill = profile.googleVerified
+    ? { text: "VERIFIED", cls: "bg-green-100 text-green-700" }
+    : canVerifyFromHere
+      ? { text: "CONNECT", cls: "bg-[#F1F5F9] text-[#64748B]" }
+      : { text: "NOT VERIFIED", cls: "bg-[#F1F5F9] text-[#64748B]" };
+
+  const linkedinPill = profile.linkedinVerified
+    ? { text: "VERIFIED", cls: "bg-green-100 text-green-700" }
+    : canVerifyFromHere
+      ? { text: "VERIFY NOW", cls: "bg-blue-600 text-white" }
+      : { text: "NOT VERIFIED", cls: "bg-[#F1F5F9] text-[#64748B]" };
+
+  const mobilePill = profile.otpVerified
+    ? { text: "VERIFIED", cls: "bg-green-100 text-green-700" }
+    : canVerifyFromHere
+      ? { text: "VERIFY", cls: "bg-[#F1F5F9] text-[#64748B]" }
+      : { text: "NOT VERIFIED", cls: "bg-[#F1F5F9] text-[#64748B]" };
 
   if (isLoading) {
     return (
@@ -541,12 +776,30 @@ export function ProfilePage({ id }: { id?: string }) {
           )}
         </div>
       </div>
+      </>
+      )}
 
       <div className="flex flex-col gap-4">
           <h2 className="text-[15px] font-bold text-[#64748B] uppercase tracking-wider px-2">Trust & Authenticity</h2>
           <div className="bg-white rounded-[20px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#F1F5F9]">
             {/* Google Verification */}
-            <div className="p-5 flex items-center justify-between border-b border-[#F1F5F9] hover:bg-[#F8FAFC] transition-colors cursor-pointer group">
+            <div
+              role={googleRowActive ? "button" : undefined}
+              tabIndex={googleRowActive ? 0 : undefined}
+              onClick={() => {
+                if (!googleRowActive || isGoogleVerifying) return;
+                promptGoogleVerification();
+              }}
+              onKeyDown={(e) => {
+                if (!googleRowActive || isGoogleVerifying) return;
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                promptGoogleVerification();
+              }}
+              className={`p-5 flex items-center justify-between border-b border-[#F1F5F9] transition-colors group ${
+                googleRowActive ? "cursor-pointer hover:bg-[#F8FAFC]" : "cursor-default"
+              }`}
+            >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
                   <FiMail className="w-6 h-6 text-blue-600" />
@@ -556,19 +809,45 @@ export function ProfilePage({ id }: { id?: string }) {
                     <span className="font-bold text-[#1A1A1A]">Google Verification</span>
                     {profile.googleVerified ? <FiCheckCircle className="w-4 h-4 text-green-500" /> : <FiAlertCircle className="w-4 h-4 text-amber-500" />}
                   </div>
-                  <p className="text-[13px] text-[#64748B]">Gmail Verification + Google Sign Up</p>
+                  <p className="text-[13px] text-[#64748B]">
+                    {canVerifyFromHere && !profile.googleVerified
+                      ? "Link your Google account to verify email and sign-in."
+                      : "Gmail verification + Google sign-in"}
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${profile.googleVerified ? 'bg-green-100 text-green-700' : 'bg-[#F1F5F9] text-[#64748B]'}`}>
-                  {profile.googleVerified ? 'VERIFIED' : 'CONNECT'}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${googlePill.cls}`}>
+                  {googlePill.text}
                 </span>
-                <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" />
+                {googleRowActive ? (
+                  isGoogleVerifying ? (
+                    <FiLoader className="w-5 h-5 animate-spin text-[#0A7EA4]" aria-hidden />
+                  ) : (
+                    <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" aria-hidden />
+                  )
+                ) : null}
               </div>
             </div>
 
             {/* LinkedIn Verification */}
-            <div className="p-5 flex items-center justify-between border-b border-[#F1F5F9] hover:bg-[#F8FAFC] transition-colors cursor-pointer group">
+            <div
+              role={linkedinRowActive ? "button" : undefined}
+              tabIndex={linkedinRowActive ? 0 : undefined}
+              onClick={() => {
+                if (!linkedinRowActive) return;
+                startLinkedinVerification();
+              }}
+              onKeyDown={(e) => {
+                if (!linkedinRowActive) return;
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                startLinkedinVerification();
+              }}
+              className={`p-5 flex items-center justify-between border-b border-[#F1F5F9] transition-colors group ${
+                linkedinRowActive ? "cursor-pointer hover:bg-[#F8FAFC]" : "cursor-default"
+              }`}
+            >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-[#0A66C2]/10 rounded-xl flex items-center justify-center">
                   <FiShield className="w-6 h-6 text-[#0A66C2]" />
@@ -578,19 +857,41 @@ export function ProfilePage({ id }: { id?: string }) {
                     <span className="font-bold text-[#1A1A1A]">LinkedIn Verification</span>
                     {profile.linkedinVerified ? <FiCheckCircle className="w-4 h-4 text-green-500" /> : <FiAlertCircle className="w-4 h-4 text-amber-500" />}
                   </div>
-                  <p className="text-[13px] text-[#64748B]">Professional identity verification</p>
+                  <p className="text-[13px] text-[#64748B]">
+                    {canVerifyFromHere && !profile.linkedinVerified
+                      ? "Continue with LinkedIn to unlock messaging and verify your profile."
+                      : "Professional identity verification"}
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${profile.linkedinVerified ? 'bg-green-100 text-green-700' : 'bg-blue-600 text-white'}`}>
-                  {profile.linkedinVerified ? 'VERIFIED' : 'VERIFY NOW'}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${linkedinPill.cls}`}>
+                  {linkedinPill.text}
                 </span>
-                <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" />
+                {linkedinRowActive ? (
+                  <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" aria-hidden />
+                ) : null}
               </div>
             </div>
 
-            {/* OTP Verification */}
-            <div className="p-5 flex items-center justify-between hover:bg-[#F8FAFC] transition-colors cursor-pointer group">
+            {/* Mobile / contact verification */}
+            <div
+              role={mobileRowActive ? "button" : undefined}
+              tabIndex={mobileRowActive ? 0 : undefined}
+              onClick={() => {
+                if (!mobileRowActive) return;
+                openMobileVerifyDialog();
+              }}
+              onKeyDown={(e) => {
+                if (!mobileRowActive) return;
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                openMobileVerifyDialog();
+              }}
+              className={`p-5 flex items-center justify-between transition-colors group ${
+                mobileRowActive ? "cursor-pointer hover:bg-[#F8FAFC]" : "cursor-default"
+              }`}
+            >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
                   <FiShield className="w-6 h-6 text-purple-600" />
@@ -600,21 +901,149 @@ export function ProfilePage({ id }: { id?: string }) {
                     <span className="font-bold text-[#1A1A1A]">Mobile Verification</span>
                     {profile.otpVerified ? <FiCheckCircle className="w-4 h-4 text-green-500" /> : <FiAlertCircle className="w-4 h-4 text-amber-500" />}
                   </div>
-                  <p className="text-[13px] text-[#64748B]">Secure access via OTP</p>
+                  <p className="text-[13px] text-[#64748B]">
+                    {canVerifyFromHere && !profile.otpVerified
+                      ? "Add your number and verify with a code we send by SMS."
+                      : "Secure access via verified phone"}
+                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${profile.otpVerified ? 'bg-green-100 text-green-700' : 'bg-[#F1F5F9] text-[#64748B]'}`}>
-                  {profile.otpVerified ? 'VERIFIED' : 'VERIFY'}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${mobilePill.cls}`}>
+                  {mobilePill.text}
                 </span>
-                <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" />
+                {mobileRowActive ? (
+                  <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" aria-hidden />
+                ) : null}
               </div>
             </div>
           </div>
         </div>
-      </>
-      )}
     </div>
+    {mobileVerifyOpen && mobileVerifyStep === "phone" ? (
+      <div
+        id={FIREBASE_PHONE_RECAPTCHA_ID}
+        className="fixed bottom-6 left-1/2 z-200 flex min-h-[78px] w-[min(100%,22rem)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white p-2 shadow-lg"
+        aria-label="Firebase security check"
+      />
+    ) : null}
+    <Dialog
+      open={mobileVerifyOpen}
+      onOpenChange={(open) => {
+        setMobileVerifyOpen(open);
+        if (!open) resetMobileDialog();
+      }}
+    >
+      <DialogContent className="sm:max-w-[400px] bg-white rounded-2xl border border-[#E2E8F0]">
+        <DialogHeader>
+          <DialogTitle className="text-[#1A1A2E]">
+            {mobileVerifyStep === "phone" ? "Verify mobile number" : "Enter verification code"}
+          </DialogTitle>
+          <DialogDescription className="text-[#64748B]">
+            {mobileVerifyStep === "phone"
+              ? "Same Firebase SMS as the app. Enter your number, tap Send code, then complete the reCAPTCHA box at the bottom of the screen."
+              : `Code sent to ${(() => {
+                  const d = normalizedMobileDialogDigits();
+                  if (d.length <= 4) return "••••";
+                  return `${"•".repeat(d.length - 4)}${d.slice(-4)}`;
+                })()}`}
+          </DialogDescription>
+        </DialogHeader>
+        {mobileVerifyStep === "phone" ? (
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex gap-2 items-stretch">
+              <select
+                value={phoneCountryDial}
+                onChange={(e) => setPhoneCountryDial(e.target.value)}
+                className="h-10 min-w-[122px] rounded-xl border border-[#E2E8F0] bg-white text-black text-sm font-medium px-2 shrink-0"
+                aria-label="Country calling code"
+              >
+                {PHONE_COUNTRY_DIAL_OPTIONS.map((o) => (
+                  <option key={o.dial} value={o.dial}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel-national"
+                placeholder="Mobile number"
+                value={phoneNationalNumber}
+                onChange={(e) =>
+                  setPhoneNationalNumber(e.target.value.replace(/[^\d\s-]/g, ""))
+                }
+                className="flex-1 rounded-xl border-[#E2E8F0] bg-white text-black placeholder:text-neutral-500"
+              />
+            </div>
+            <Button
+              type="button"
+              className="w-full rounded-xl bg-[#0A7EA4] hover:bg-[#086a8a] text-white"
+              disabled={isSendingPhoneOtp}
+              onClick={() => void handleSendPhoneOtp()}
+            >
+              {isSendingPhoneOtp ? (
+                <span className="flex items-center justify-center gap-2">
+                  <FiLoader className="w-4 h-4 animate-spin" /> Sending…
+                </span>
+              ) : (
+                "Send code"
+              )}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 pt-2">
+            <Input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="6-digit code"
+              value={mobileOtpInput}
+              onChange={(e) => setMobileOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              className="rounded-xl border-[#E2E8F0] bg-white text-black text-center text-2xl tracking-[0.4em] font-mono placeholder:text-neutral-500"
+            />
+            <Button
+              type="button"
+              className="w-full rounded-xl bg-[#0A7EA4] hover:bg-[#086a8a] text-white"
+              disabled={isVerifyingPhoneOtp}
+              onClick={() => void handleVerifyPhoneOtpSubmit()}
+            >
+              {isVerifyingPhoneOtp ? (
+                <span className="flex items-center justify-center gap-2">
+                  <FiLoader className="w-4 h-4 animate-spin" /> Verifying…
+                </span>
+              ) : (
+                "Verify"
+              )}
+            </Button>
+            <div className="flex gap-2 justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-[#64748B]"
+                disabled={isSendingPhoneOtp || isVerifyingPhoneOtp}
+                onClick={() => {
+                  setMobileVerifyStep("phone");
+                  setFirebaseVerificationId(null);
+                  setMobileOtpInput("");
+                }}
+              >
+                Change number
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-[#0A7EA4]"
+                disabled={isSendingPhoneOtp || isVerifyingPhoneOtp}
+                onClick={() => void handleResendPhoneOtp()}
+              >
+                Resend code
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
     <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
     </>
   );

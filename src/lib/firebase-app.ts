@@ -1,6 +1,10 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
+import type { Auth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, initializeAuth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
+
+const firebaseAuthByApp = new WeakMap<FirebaseApp, Auth>();
 
 function envReady(value: string | undefined): boolean {
   return Boolean(value && value.trim());
@@ -29,6 +33,23 @@ export function getFirebaseApp(): FirebaseApp | null {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
   });
+}
+
+/** Browser-only Auth (Next.js–safe singleton per Firebase app). */
+export function getClientFirebaseAuth(): Auth | null {
+  if (typeof window === "undefined") return null;
+  const app = getFirebaseApp();
+  if (!app) return null;
+  const cached = firebaseAuthByApp.get(app);
+  if (cached) return cached;
+  let auth: Auth;
+  try {
+    auth = initializeAuth(app, { persistence: browserLocalPersistence });
+  } catch {
+    auth = getAuth(app);
+  }
+  firebaseAuthByApp.set(app, auth);
+  return auth;
 }
 
 export function getFirestoreDb(): Firestore | null {

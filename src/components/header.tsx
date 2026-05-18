@@ -1,5 +1,5 @@
 "use client";
-import { Bell, ChevronDown, Menu, MessageCircle, MessageSquare, MoreHorizontal, Search } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, MessageCircle, MessageSquare, Settings, User } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -7,6 +7,7 @@ import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
+import { logout } from "@/store/authSlice";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -35,8 +36,10 @@ function formatRelativeTime(dateString: string) {
 export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showMessages, setShowMessages] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
@@ -44,7 +47,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
 
   const { data: notificationsData } = useGetNotificationsQuery(user?._id || "", {
     skip: !isAuthenticated || !user?._id,
-    pollingInterval: 3000, // Sync with chat polling
+    pollingInterval: 3000,
   });
   const { data: unreadData } = useGetUnreadStatusQuery(user?._id || "", {
     skip: !isAuthenticated || !user?._id,
@@ -52,7 +55,6 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   });
   const [markAllRead] = useMarkAllReadMutation();
 
-  // Split notifications into system and messages
   const notifications = notificationsData?.notifs || [];
   
   const systemNotifications = notifications.filter(n => n.type !== "chat_request");
@@ -61,6 +63,18 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   const hasSystemUnread = systemNotifications.some(n => !n.isRead);
   const unreadMessageCount = messageNotifications.filter(n => !n.isRead).length;
 
+  const handleLogout = () => {
+    dispatch(logout());
+    setShowUserMenu(false);
+    router.push("/login");
+  };
+
+  const toggleUserMenu = () => {
+    setShowUserMenu((open) => !open);
+    setShowNotifications(false);
+    setShowMessages(false);
+  };
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
@@ -68,6 +82,9 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
       }
       if (messageRef.current && !messageRef.current.contains(event.target as Node)) {
         setShowMessages(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -83,16 +100,13 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
         >
           <Menu className="w-6 h-6" />
         </button>
-        
-
       </div>
 
       <div className="flex items-center gap-3 md:gap-6 ml-4">
         <div className="hidden sm:flex items-center gap-4 border-r border-[#E0E0E0] pr-4 md:pr-6">
-          {/* Notifications Dropdown */}
           <div className="relative" ref={notificationRef}>
             <button 
-              onClick={() => { setShowNotifications(!showNotifications); setShowMessages(false); }}
+              onClick={() => { setShowNotifications(!showNotifications); setShowMessages(false); setShowUserMenu(false); }}
               className={`relative p-1.5 rounded-full transition-all duration-200 ${showNotifications ? 'bg-[#F0ECF9] text-[#7B61FF]' : 'text-[#757575] hover:bg-[#F5F5F5]'}`}
             >
               <Bell className="w-5 h-5" />
@@ -154,7 +168,6 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
             </AnimatePresence>
           </div>
 
-          {/* Messages Dropdownsdjfjasdjaslfjdksf */}
           <div className="relative" ref={messageRef}>
             <button 
               onClick={() => router.push('/chats')}
@@ -162,11 +175,9 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
             >
               <MessageSquare className="w-5 h-5" />
             </button>
-            
           </div>
         </div>
 
-        {/* Messaging Toggle for mobile/tablet */}
         <button 
           onClick={onPartnersClick}
           className="xl:hidden p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors relative"
@@ -176,38 +187,115 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
         </button>
 
         {isAuthenticated && user ? (
-          <div 
-            onClick={() => router.push('/profile')}
-            className="flex items-center gap-2 md:gap-3 cursor-pointer group"
-          >
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden border border-[#E0E0E0] shrink-0 group-hover:border-[#0A7EA4] transition-colors">
-              <ImageWithFallback
-                src={resolveUserProfileImageUrl(user, `${user.firstName} ${user.lastName}`)}
-                alt={`${user.firstName} ${user.lastName}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div className="hidden sm:flex flex-col">
-              <div className="flex items-center gap-1">
-                <span className="font-bold text-[14px] text-[#1A1A2E] group-hover:text-[#0A7EA4] transition-colors">
-                  {user.firstName} {user.lastName}
-                </span>
-                <ChevronDown className="w-4 h-4 text-[#757575]" />
+          <div className="relative" ref={userMenuRef}>
+            <div className="flex items-center gap-2 md:gap-3 group">
+              <button
+                type="button"
+                onClick={toggleUserMenu}
+                className="w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden border border-[#E0E0E0] shrink-0 group-hover:border-[#0A7EA4] transition-colors sm:hidden cursor-pointer"
+                aria-label="Open account menu"
+              >
+                <ImageWithFallback
+                  src={resolveUserProfileImageUrl(user, `${user.firstName} ${user.lastName}`)}
+                  alt={`${user.firstName} ${user.lastName}`}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+              <div className="hidden sm:block w-8 h-8 md:w-10 md:h-10 rounded-full overflow-hidden border border-[#E0E0E0] shrink-0 group-hover:border-[#0A7EA4] transition-colors pointer-events-none">
+                <ImageWithFallback
+                  src={resolveUserProfileImageUrl(user, `${user.firstName} ${user.lastName}`)}
+                  alt={`${user.firstName} ${user.lastName}`}
+                  className="w-full h-full object-cover"
+                />
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                {user.isGoogleVerified && (
-                  <div className="flex items-center gap-0.5 text-[10px] font-medium text-[#16A34A]">
-                    <span className="w-3 h-3 bg-[#16A34A] rounded-xs flex items-center justify-center text-[7px] text-white font-bold">G</span>
-                    <span>Verified</span>
-                  </div>
-                )}
-                {user.isLinkedinVerified && (
-                  <div className="bg-[#0A66C2] text-white text-[8px] px-0.5 rounded-[1px] flex items-center justify-center font-bold h-3">
-                    in
-                  </div>
-                )}
+              <div className="hidden sm:flex flex-col">
+                <button
+                  type="button"
+                  onClick={toggleUserMenu}
+                  className="flex items-center gap-1 text-left cursor-pointer"
+                  aria-expanded={showUserMenu}
+                  aria-haspopup="menu"
+                >
+                  <span className="font-bold text-[14px] text-[#1A1A2E] group-hover:text-[#0A7EA4] transition-colors">
+                    {user.firstName} {user.lastName}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-[#757575] transition-transform duration-200 ${showUserMenu ? "rotate-180 text-[#0A7EA4]" : ""}`}
+                  />
+                </button>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {user.isGoogleVerified && (
+                    <div className="flex items-center gap-0.5 text-[10px] font-medium text-[#16A34A]">
+                      <span className="w-3 h-3 bg-[#16A34A] rounded-xs flex items-center justify-center text-[7px] text-white font-bold">G</span>
+                      <span>Verified</span>
+                    </div>
+                  )}
+                  {user.isLinkedinVerified && (
+                    <div className="bg-[#0A66C2] text-white text-[8px] px-0.5 rounded-[1px] flex items-center justify-center font-bold h-3">
+                      in
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+            <AnimatePresence>
+              {showUserMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-44 bg-white rounded-xl shadow-xl border border-[#E0E0E0] overflow-hidden z-[1000] py-1"
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      router.push("/profile");
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#1A1A2E] hover:bg-[#F5F5F5] transition-colors"
+                  >
+                    <User className="w-4 h-4 text-[#757575]" />
+                    Profile
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      router.push("/chats");
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#1A1A2E] hover:bg-[#F5F5F5] transition-colors"
+                  >
+                    <MessageSquare className="w-4 h-4 text-[#757575]" />
+                    Chat
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      router.push("/settings");
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-[#1A1A2E] hover:bg-[#F5F5F5] transition-colors"
+                  >
+                    <Settings className="w-4 h-4 text-[#757575]" />
+                    Settings
+                  </button>
+                  <div className="my-1 border-t border-[#F0F0F0]" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ) : (
           <button 
@@ -221,6 +309,3 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
     </header>
   );
 }
-
-
-
