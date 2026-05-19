@@ -13,6 +13,7 @@ import {
 } from "@/lib/web-desktop-notifications";
 import { getFirebaseWebVapidKey, syncWebFcmTokenToServer } from "@/lib/fcm-web";
 import { useAppSelector } from "@/store/hooks";
+import { useSaveEmailNotifPrefMutation } from "@/store/endpoints/members";
 
 type SettingsToggleProps = {
   enabled: boolean;
@@ -45,8 +46,12 @@ export function SettingsPage() {
   const [chatEnabled, setChatEnabled] = useState(() =>
     getDesktopChatNotificationsEnabled()
   );
-  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [emailEnabled, setEmailEnabled] = useState(() =>
+    user?.isEmailNotifAllowed !== false
+  );
+  const [emailSaving, setEmailSaving] = useState(false);
   const [permLabel, setPermLabel] = useState<string | null>(null);
+  const [saveEmailPref] = useSaveEmailNotifPrefMutation();
 
   const onPushMasterChange = useCallback(async (next: boolean) => {
     if (next) {
@@ -90,6 +95,19 @@ export function SettingsPage() {
     setDesktopChatNotificationsEnabled(next);
     setChatEnabled(next);
   }, []);
+
+  const onEmailToggle = useCallback(async (next: boolean) => {
+    if (!uid) return;
+    setEmailEnabled(next);
+    setEmailSaving(true);
+    try {
+      await saveEmailPref({ userId: uid, isAllowed: next }).unwrap();
+    } catch {
+      setEmailEnabled(!next);
+    } finally {
+      setEmailSaving(false);
+    }
+  }, [uid, saveEmailPref]);
 
   return (
     <div className="sm:-m-8 p-6 flex flex-col font-sans">
@@ -142,10 +160,13 @@ export function SettingsPage() {
           <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Email Notifications</span>
             <span className="text-[13px] text-[#757575] leading-[1.4]">
-              Receive emails about chat requests and new posts
+              Receive emails about chat messages and new posts
             </span>
+            {emailSaving && (
+              <span className="text-[12px] text-[#0A7EA4] mt-1">Saving…</span>
+            )}
           </div>
-          <SettingsToggle enabled={emailEnabled} setEnabled={setEmailEnabled} />
+          <SettingsToggle enabled={emailEnabled} setEnabled={onEmailToggle} />
         </div>
 
         <div className="h-[1px] bg-[#EEEEEE] mx-5" />

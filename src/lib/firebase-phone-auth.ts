@@ -1,5 +1,4 @@
 import { getClientFirebaseAuth } from "@/lib/firebase-app";
-import type { Auth } from "firebase/auth";
 import {
   PhoneAuthProvider,
   RecaptchaVerifier,
@@ -24,8 +23,10 @@ let activeVerifier: InstanceType<typeof RecaptchaVerifier> | null = null;
 export function resetPhoneRecaptcha(): void {
   clearRecaptchaVerifier(activeVerifier);
   activeVerifier = null;
+  // Remove the element entirely so the next call gets a fresh DOM node.
+  // replaceChildren() leaves stale grecaptcha widget registry entries.
   const el = document.getElementById(FIREBASE_PHONE_RECAPTCHA_ID);
-  if (el) el.replaceChildren();
+  if (el) el.remove();
 }
 
 export function clearRecaptchaVerifier(
@@ -46,107 +47,57 @@ function isPhoneTestMode(): boolean {
   );
 }
 
-function enableFirebasePhoneTestMode(auth: Auth): void {
-  if (isPhoneTestMode()) {
-    auth.settings.appVerificationDisabledForTesting = true;
-  }
-}
 
 function ensureRecaptchaHost(): HTMLElement {
   let el = document.getElementById(FIREBASE_PHONE_RECAPTCHA_ID);
   if (!el) {
     el = document.createElement("div");
     el.id = FIREBASE_PHONE_RECAPTCHA_ID;
-    el.setAttribute("aria-label", "Firebase security check");
-    el.className =
-      "fixed bottom-6 left-1/2 z-200 flex min-h-[78px] w-[min(100%,22rem)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white p-2 shadow-lg";
+    el.style.cssText = "position:absolute;width:0;height:0;overflow:hidden;visibility:hidden;";
     document.body.appendChild(el);
   }
   return el;
 }
 
 /**
- * Firebase phone OTP (web) — same SMS pipeline as Android `verifyPhoneNumber`.
- * User must complete the visible reCAPTCHA; then SMS is sent.
+ * Web equivalent of Android's FirebaseAuth.verifyPhoneNumber().
+ *
+ * Flow mirrors Android:
+ *   verifyPhoneNumber → codeSent(verificationId) → [user enters SMS code]
+ *   → PhoneAuthProvider.credential(verificationId, code) → signInWithCredential
+ *
+ * reCAPTCHA is required on web (Android uses Play Integrity instead).
+ * If you see CAPTCHA_CHECK_FAILED/MALFORMED, go to Firebase Console →
+ * Authentication → Settings → Advanced → reCAPTCHA Enterprise → Disable.
  */
-export function sendFirebasePhoneOtp(e164: string): Promise<string> {
+export async function sendFirebasePhoneOtp(e164: string): Promise<string> {
   const auth = getClientFirebaseAuth();
-  if (!auth) {
-    return Promise.reject(new Error("Firebase is not configured."));
-  }
+  if (!auth) throw new Error("Firebase is not configured.");
 
   if (!/^\+\d{8,15}$/.test(e164)) {
-    return Promise.reject(
-      Object.assign(new Error("Invalid phone format"), {
-        code: "auth/invalid-phone-number",
-      })
-    );
+    throw Object.assign(new Error("Invalid phone format"), {
+      code: "auth/invalid-phone-number",
+    });
   }
 
-  enableFirebasePhoneTestMode(auth);
+  if (isPhoneTestMode()) {
+    auth.settings.appVerificationDisabledForTesting = true;
+  }
+
   resetPhoneRecaptcha();
   ensureRecaptchaHost();
 
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const fail = (err: unknown) => {
-      if (settled) return;
-      settled = true;
-      resetPhoneRecaptcha();
-      reject(err);
-    };
-    const succeed = (verificationId: string) => {
-      if (settled) return;
-      settled = true;
-      resolve(verificationId);
-    };
+  try {
+    activeVerifier = new RecaptchaVerifier(auth, FIREBASE_PHONE_RECAPTCHA_ID, {
+      size: "invisible",
+    });
 
-    try {
-      activeVerifier = new RecaptchaVerifier(auth, FIREBASE_PHONE_RECAPTCHA_ID, {
-        size: "normal",
-        callback: async () => {
-          if (!activeVerifier) {
-            fail(
-              Object.assign(new Error("reCAPTCHA not ready"), {
-                code: "auth/missing-app-credential",
-              })
-            );
-            return;
-          }
-          try {
-            const confirmation = await signInWithPhoneNumber(
-              auth,
-              e164,
-              activeVerifier
-            );
-            succeed(confirmation.verificationId);
-          } catch (err) {
-            fail(err);
-          }
-        },
-        "expired-callback": () => {
-          fail(
-            Object.assign(new Error("reCAPTCHA expired"), {
-              code: "auth/captcha-check-failed",
-            })
-          );
-        },
-      });
-    } catch (err) {
-      fail(err);
-      return;
-    }
-
-    activeVerifier
-      .render()
-      .then(() => {
-        if (isPhoneTestMode()) {
-          // With test numbers + appVerificationDisabledForTesting, solve immediately.
-          void activeVerifier?.verify().catch(fail);
-        }
-      })
-      .catch(fail);
-  });
+    const confirmation = await signInWithPhoneNumber(auth, e164, activeVerifier);
+    return confirmation.verificationId;
+  } catch (err) {
+    resetPhoneRecaptcha();
+    throw err;
+  }
 }
 
 export async function confirmFirebasePhoneOtp(
@@ -186,7 +137,7 @@ export function firebasePhoneAuthErrorMessage(err: unknown): string {
       return "Code expired. Request a new code.";
     case "auth/invalid-app-credential":
     case "auth/missing-app-credential":
-      return "Complete the reCAPTCHA box below, then try again. Also check Firebase → Authorized domains includes localhost.";
+      return "reCAPTCHA verification failed. Check Firebase Console → Authentication → Authorized domains includes this domain.";
     case "auth/captcha-check-failed":
       return "reCAPTCHA failed. Refresh and try again.";
     case "auth/operation-not-allowed":

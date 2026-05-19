@@ -11,7 +11,6 @@ import {
 import { isFirebaseConfigured } from "@/lib/firebase-app";
 import {
   confirmFirebasePhoneOtp,
-  FIREBASE_PHONE_RECAPTCHA_ID,
   firebasePhoneAuthErrorMessage,
   getFirebasePhoneAuthIdToken,
   resetPhoneRecaptcha,
@@ -192,18 +191,7 @@ export function ProfilePage({ id }: { id?: string }) {
     setMobileVerifyOpen(true);
   };
 
-  /** Same as Android: Firebase proves OTP → Mongo user updated via API. */
-  const syncVerifiedPhoneToBackend = async () => {
-    try {
-      const firebaseIdToken = await getFirebasePhoneAuthIdToken();
-      return await firebasePhoneVerifyMutate({ firebaseIdToken }).unwrap();
-    } catch {
-      const e164 = normalizedMobileDialogDigits();
-      const digits = e164.replace(/\D/g, "");
-      return await verifyUserMutate({ mobileNumber: digits ? `+${digits}` : e164 }).unwrap();
-    }
-  };
-
+  /** Web equivalent of Android's verifyPhoneNumber → codeSent → PhoneAuthProvider.credential → signInWithCredential */
   const handleSendPhoneOtp = async (): Promise<void> => {
     const e164 = normalizedMobileDialogDigits();
     const nationalLen = phoneNationalNumber.replace(/\D/g, "").length;
@@ -212,15 +200,11 @@ export function ProfilePage({ id }: { id?: string }) {
       return;
     }
     setIsSendingPhoneOtp(true);
-    toast.message("Complete the security check below", {
-      description: "Tick “I’m not a robot”, then SMS will be sent automatically.",
-      duration: 8000,
-    });
     try {
       const verificationId = await sendFirebasePhoneOtp(e164);
       setFirebaseVerificationId(verificationId);
       setMobileVerifyStep("otp");
-      toast.success("Verification code sent (same Firebase SMS as the app).");
+      toast.success("Verification code sent by SMS.");
     } catch (err: unknown) {
       toast.error(firebasePhoneAuthErrorMessage(err));
     } finally {
@@ -228,6 +212,7 @@ export function ProfilePage({ id }: { id?: string }) {
     }
   };
 
+  /** Web equivalent of Android's PhoneAuthProvider.credential → signInWithCredential → verifyUser API */
   const handleVerifyPhoneOtpSubmit = async (): Promise<void> => {
     const code = mobileOtpInput.replace(/\D/g, "");
     if (!/^\d{6}$/.test(code)) {
@@ -241,8 +226,20 @@ export function ProfilePage({ id }: { id?: string }) {
     }
     setIsVerifyingPhoneOtp(true);
     try {
+      // Same as Android: PhoneAuthProvider.credential(verificationId, smsCode) + signInWithCredential
       await confirmFirebasePhoneOtp(firebaseVerificationId, code);
-      const response = await syncVerifiedPhoneToBackend();
+
+      // Sync verified phone to our backend (same as Android's verifyUser API call)
+      let response: { user: { jwttoken: string } & Record<string, unknown> };
+      try {
+        const firebaseIdToken = await getFirebasePhoneAuthIdToken();
+        response = await firebasePhoneVerifyMutate({ firebaseIdToken }).unwrap();
+      } catch {
+        const e164 = normalizedMobileDialogDigits();
+        const digits = e164.replace(/\D/g, "");
+        response = await verifyUserMutate({ mobileNumber: digits ? `+${digits}` : e164 }).unwrap();
+      }
+
       dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
       refetch();
       toast.success("Mobile verified.");
@@ -259,7 +256,6 @@ export function ProfilePage({ id }: { id?: string }) {
     setMobileVerifyStep("phone");
     setFirebaseVerificationId(null);
     setMobileOtpInput("");
-    await new Promise((r) => setTimeout(r, 200));
     await handleSendPhoneOtp();
   };
 
@@ -920,13 +916,6 @@ export function ProfilePage({ id }: { id?: string }) {
           </div>
         </div>
     </div>
-    {mobileVerifyOpen && mobileVerifyStep === "phone" ? (
-      <div
-        id={FIREBASE_PHONE_RECAPTCHA_ID}
-        className="fixed bottom-6 left-1/2 z-200 flex min-h-[78px] w-[min(100%,22rem)] -translate-x-1/2 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white p-2 shadow-lg"
-        aria-label="Firebase security check"
-      />
-    ) : null}
     <Dialog
       open={mobileVerifyOpen}
       onOpenChange={(open) => {
