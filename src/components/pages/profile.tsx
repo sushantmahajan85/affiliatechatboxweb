@@ -230,7 +230,7 @@ export function ProfilePage({ id }: { id?: string }) {
       await confirmFirebasePhoneOtp(firebaseVerificationId, code);
 
       // Sync verified phone to our backend (same as Android's verifyUser API call)
-      let response: { user: { jwttoken: string } & Record<string, unknown> };
+      let response: { user: { jwttoken: string; _id: string; isverified: boolean } & Record<string, unknown> };
       try {
         const firebaseIdToken = await getFirebasePhoneAuthIdToken();
         response = await firebasePhoneVerifyMutate({ firebaseIdToken }).unwrap();
