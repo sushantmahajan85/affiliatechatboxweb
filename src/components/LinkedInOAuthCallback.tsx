@@ -5,9 +5,22 @@ import { useRouter } from "next/navigation";
 import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { toast } from "sonner";
 
-export function LinkedInOAuthCallback() {
+const LINKEDIN_CALLBACK_PATH = "/auth/linkedin/callback";
+
+type LinkedInOAuthCallbackProps = {
+  /** Where to send the user after credentials are stored (default: home). */
+  redirectTo?: string;
+};
+
+function stripUrlToPath(path: string) {
+  if (typeof window === "undefined") return;
+  window.history.replaceState(null, "", path);
+}
+
+export function LinkedInOAuthCallback({
+  redirectTo = "/",
+}: LinkedInOAuthCallbackProps = {}) {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const handled = useRef(false);
@@ -16,14 +29,26 @@ export function LinkedInOAuthCallback() {
     if (typeof window === "undefined" || handled.current) return;
 
     const params = new URLSearchParams(window.location.search);
+    const linkedinError = params.get("linkedin_error");
     const linkedinSuccess = params.get("linkedin_success");
     const token = params.get("token");
     const userId = params.get("userId");
-    const linkedInUrlFromRedirect = params.get("linkedInUrl");
 
-    if (linkedinSuccess !== "true" || !token || !userId) return;
+    const isCallback =
+      linkedinError ||
+      (linkedinSuccess === "true" && token && userId);
+
+    if (!isCallback) return;
 
     handled.current = true;
+
+    // Remove token and PII from the address bar immediately (before async work).
+    stripUrlToPath(window.location.pathname || LINKEDIN_CALLBACK_PATH);
+
+    if (linkedinError) {
+      router.replace(redirectTo);
+      return;
+    }
 
     const finish = async () => {
       try {
@@ -32,31 +57,17 @@ export function LinkedInOAuthCallback() {
         });
         const data = await res.json();
         if (data?.user) {
-          dispatch(setCredentials({ user: data.user, token }));
-          const savedUrl = data.user.LinkedIn || linkedInUrlFromRedirect;
-          if (savedUrl) {
-            toast.success("LinkedIn connected. Your profile link is saved.");
-          } else {
-            toast.success("LinkedIn verified.");
-            toast.message(
-              "Profile URL was not returned by LinkedIn. Add your LinkedIn URL on your profile, or ask admin to enable r_basicprofile on the server.",
-              { duration: 8000 }
-            );
-          }
-        } else {
-          toast.error("Could not load your account after LinkedIn sign-in.");
+          dispatch(setCredentials({ user: data.user, token: token! }));
         }
       } catch (e) {
         console.error("LinkedIn OAuth callback sync failed:", e);
-        toast.error("Failed to sync LinkedIn account.");
       } finally {
-        const path = window.location.pathname || "/";
-        router.replace(path);
+        router.replace(redirectTo);
       }
     };
 
     finish();
-  }, [dispatch, router]);
+  }, [dispatch, router, redirectTo]);
 
   return null;
 }
