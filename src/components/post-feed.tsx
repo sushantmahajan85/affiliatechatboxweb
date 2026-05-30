@@ -18,13 +18,14 @@ import {
   usePinPostMutation,
   useUnpinPostMutation
 } from "@/store/endpoints/posts";
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
-import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+import { PostHashtags } from "@/components/post-hashtags";
 import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
@@ -69,14 +70,33 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   });
 
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
 
-  const handleStartChat = (e: React.MouseEvent, postUserId: string, authorLinkedinVerified?: boolean) => {
+  const handleStartChat = (
+    e: React.MouseEvent,
+    postUserId: string,
+    authorLinkedinVerified?: boolean,
+    authorIsAdmin?: boolean
+  ) => {
     e.stopPropagation();
     if (!isAuthenticated) {
       dispatch(openAuthModal());
       return;
     }
-    if (isLinkedinOnlyChatBlocked(user?.isLinkedinVerified, authorLinkedinVerified, user?.role === "admin")) {
+    if (isSelfChatPartner(user?._id, postUserId)) {
+      toast.error("You cannot chat with yourself");
+      return;
+    }
+    const blockReason = getLinkedinChatBlockReason(
+      user?.isLinkedinVerified,
+      authorLinkedinVerified,
+      user?.role === "admin",
+      authorIsAdmin
+    );
+    if (blockReason) {
+      setLinkedinGuardReason(blockReason);
       setLinkedinGuardOpen(true);
       return;
     }
@@ -281,12 +301,17 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                 </div>
               </div>
 
-              <p className="text-[14px] text-[#374151] leading-[1.6] mb-3 flex-1 line-clamp-3">
+              <p className="text-[14px] text-[#374151] leading-[1.6] mb-2 flex-1 line-clamp-3">
                 {post.postContent}
               </p>
-              <div className="pt-3 border-t border-[#F3F4F6] flex gap-2">
+              <PostHashtags
+                postDescription={post.postDescription}
+                className="mb-3"
+                onTagClick={(e) => e.stopPropagation()}
+              />
+              <div className="pt-3 border-t border-[#F3F4F6] flex gap-2 mt-auto">
                 <button 
-                  onClick={(e) => handleStartChat(e, post.userId, post.isLinkedinVerified)}
+                  onClick={(e) => handleStartChat(e, post.userId, post.isLinkedinVerified, post.role === "admin")}
                   className="flex-1 flex items-center justify-center gap-2 h-9 bg-[#0A7EA4] border border-[#0A7EA4] rounded-lg text-white text-[12px] font-medium hover:bg-[#086a8a] transition-colors shadow-sm"
                 >
                   <MessageCircle className="w-4 h-4 text-white" />
@@ -312,7 +337,11 @@ export function PostFeed({ activeTab }: PostFeedProps) {
         )}
       </div>
     </div>
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinGuardOpen}
+      onOpenChange={setLinkedinGuardOpen}
+      reason={linkedinGuardReason}
+    />
     </>
   );
 }

@@ -8,21 +8,17 @@ import { PartnersSidebar } from "./partners-sidebar";
 import { Sidebar } from "./sidebar";
 import { ConnectionRequestModal } from "./connection-request-modal";
 import { DesktopNotificationBridge } from "./desktop-notification-bridge";
+import { GuestRouteGuard } from "./guest-route-guard";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isPartnersOpen, setIsPartnersOpen] = useState(false);
   
-  const activeChats = useAppSelector((state) => state.chat.activeChats);
-
-  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
-  const isLinkedInVerified = user?.isLinkedinVerified || false;
-  const isAdmin = user?.role === "admin";
-
-  const showChat = isAuthenticated && (isLinkedInVerified || isAdmin);
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] font-sans text-[#1A1A2E] overflow-hidden">
+      <GuestRouteGuard />
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
       <div className="flex-1 flex flex-col min-w-0 h-full">
@@ -42,16 +38,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
             </div>
           </main>
           
-          <PartnersSidebar 
+          <PartnersSidebar
             isOpen={isPartnersOpen}
-            onClose={() => setIsPartnersOpen(false)} activeChats={[]} setActiveChats={function (chats: any[]): void {
-              throw new Error("Function not implemented.");
-            } }          />
+            onClose={() => setIsPartnersOpen(false)}
+          />
 
           {/* Messaging Windows & Bar - Floating outside sidebar clipping */}
-          {showChat && (
-            <MessagingOverlay />
-          )}
+          <MessagingOverlay />
 
           <AuthModal />
           <ConnectionRequestModal />

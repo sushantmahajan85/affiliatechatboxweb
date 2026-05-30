@@ -1,5 +1,6 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { PostHashtags } from "@/components/post-hashtags";
 import {
   Dialog,
   DialogContent,
@@ -35,8 +36,8 @@ import { toast } from "sonner";
 
 
 
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
-import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetPostByIdQuery } from "@/store/endpoints/posts";
 import clsx from "clsx";
@@ -70,6 +71,9 @@ export function PostDetailsPage() {
   });
 
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
 
   const handleStartChat = () => {
     if (!isAuthenticated || !currentUser) {
@@ -78,7 +82,19 @@ export function PostDetailsPage() {
     }
     if (!data?.post) return;
 
-    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, data.post.isLinkedinVerified, currentUser.role === "admin")) {
+    if (isSelfChatPartner(currentUser._id, data.post.userId)) {
+      toast.error("You cannot chat with yourself");
+      return;
+    }
+
+    const blockReason = getLinkedinChatBlockReason(
+      currentUser.isLinkedinVerified,
+      data.post.isLinkedinVerified,
+      currentUser.role === "admin",
+      data.post.role === "admin"
+    );
+    if (blockReason) {
+      setLinkedinGuardReason(blockReason);
       setLinkedinGuardOpen(true);
       return;
     }
@@ -224,11 +240,7 @@ const renderContent = (text: string) => {
           </p>
 
           
-          {post.postDescription && (
-             <p className="text-[15px] text-[#4B5563] leading-[1.6] bg-[#F9FAFB] p-4 rounded-xl border border-[#F3F4F6]">
-              {post.postDescription}
-            </p>
-          )}
+          <PostHashtags postDescription={post.postDescription} className="mb-2" />
 
           {post.postMediaUrl && (
             <div className="rounded-2xl overflow-hidden border border-[#E5E7EB] bg-black max-h-[600px] flex items-center justify-center">
@@ -376,7 +388,11 @@ const renderContent = (text: string) => {
         </DialogContent>
       </Dialog>
     </div>
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinGuardOpen}
+      onOpenChange={setLinkedinGuardOpen}
+      reason={linkedinGuardReason}
+    />
     </>
   );
 }

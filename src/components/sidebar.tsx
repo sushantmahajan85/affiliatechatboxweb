@@ -53,6 +53,8 @@ interface SidebarProps {
 
 import { logout } from "@/store/authSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
+import { isAuthRequiredMenuPath } from "@/lib/auth-guard-paths";
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -63,8 +65,17 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
 
   const handleLogout = () => {
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
     dispatch(logout());
     router.push("/login");
+  };
+
+  const handleProtectedNav = () => {
+    dispatch(openAuthModal());
+    if (window.innerWidth < 768) onClose?.();
   };
 
   return (
@@ -117,28 +128,44 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <nav className="flex-1 pt-4 overflow-y-auto no-scrollbar">
           {MENU_ITEMS.map((item) => {
             const isActive = pathname === item.path;
+            const requiresAuth = isAuthRequiredMenuPath(item.path);
+            const navClassName = clsx(
+              "flex items-center transition-colors w-full",
+              isCollapsed ? "justify-center px-0 h-[52px]" : "gap-4 px-4 h-[52px] text-[15px]",
+              isActive
+                ? "bg-[#EEF2FF] text-[#1A1A2E] font-bold"
+                : "text-[#757575] hover:bg-[#F5F5F5]",
+            );
+
+            if (requiresAuth && !isAuthenticated) {
+              return (
+                <button
+                  key={item.path}
+                  type="button"
+                  onClick={handleProtectedNav}
+                  className={navClassName}
+                  title={isCollapsed ? item.label : ""}
+                >
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                </button>
+              );
+            }
+
             return (
-            <Link
-              key={item.path}
-              href={item.path}
-              onClick={() => {
-                if (window.innerWidth < 768) {
-                  onClose?.();
-                }
-              }}
-              className={clsx(
-                "flex items-center transition-colors",
-                isCollapsed ? "justify-center px-0 h-[52px]" : "gap-4 px-4 h-[52px] text-[15px]",
-                isActive
-                  ? "bg-[#EEF2FF] text-[#1A1A2E] font-bold"
-                  : "text-[#757575] hover:bg-[#F5F5F5]",
-              )}
-              title={isCollapsed ? item.label : ""}
-            >
-              <item.icon className="w-5 h-5 shrink-0" />
-              {!isCollapsed && <span className="truncate">{item.label}</span>}
-            </Link>
-            )
+              <Link
+                key={item.path}
+                href={item.path}
+                onClick={() => {
+                  if (window.innerWidth < 768) onClose?.();
+                }}
+                className={navClassName}
+                title={isCollapsed ? item.label : ""}
+              >
+                <item.icon className="w-5 h-5 shrink-0" />
+                {!isCollapsed && <span className="truncate">{item.label}</span>}
+              </Link>
+            );
           })}
 
           {/* Download App Section - Hidden when collapsed */}
@@ -199,7 +226,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             title={isCollapsed ? "Logout" : ""}
           >
             <LogOut className="w-5 h-5 shrink-0" />
-            {!isCollapsed && <span>Logout</span>}
+            {!isCollapsed && <span>{isAuthenticated ? "Logout" : "Sign In"}</span>}
           </button>
         </div>
       </aside>

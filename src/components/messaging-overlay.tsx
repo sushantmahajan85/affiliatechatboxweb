@@ -4,12 +4,12 @@ import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import { 
   X, Smile, Paperclip, Send, 
-  CheckCheck, Search, MoreHorizontal, Edit3, 
+  CheckCheck, Search,
   ChevronDown, ChevronUp, Info
 } from "lucide-react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { closeChat, openChat, toggleMessagingBar } from "@/store/chatSlice";
+import { closeChat, openChat, toggleMessagingBar, updateActiveChatProfile } from "@/store/chatSlice";
 import { 
   useGetChatHistoryQuery, 
   useMarkChatAsReadMutation 
@@ -20,12 +20,17 @@ import { useInboxPreviewChats } from "@/hooks/use-inbox-preview-chats";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
 import { sendFirestoreChatMessage, isAdminSupportChatPartner } from "@/lib/firebase-chat";
-import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import {
+  getLinkedinChatBlockReason,
+  isSelfChatPartner,
+  senderCanUseLinkedinChat,
+} from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { openAuthModal } from "@/store/uiSlice";
 
 // --- Sub-component for individual Chat Windows ---
 type OverlayChatPeer = {
@@ -43,7 +48,12 @@ function OverlayChatListItem({
 }: {
   chat: OverlayChatPeer & { lastMsg: string; unreadCount: number };
   isActive: boolean;
-  onOpen: (resolvedName: string, resolvedAvatar: string, partnerLinkedinVerified: boolean) => void;
+  onOpen: (
+    resolvedName: string,
+    resolvedAvatar: string,
+    partnerLinkedinVerified: boolean,
+    partnerIsAdmin: boolean
+  ) => void;
 }) {
   const { data: profileData, isLoading } = useGetProfileQuery(chat.id, { skip: !chat.id });
   const user = profileData?.user;
@@ -55,7 +65,7 @@ function OverlayChatListItem({
     <div
       onClick={() => {
         if (isLoading) return;
-        onOpen(resolvedName, resolvedAvatar, Boolean(user?.isLinkedinVerified));
+        onOpen(resolvedName, resolvedAvatar, Boolean(user?.isLinkedinVerified), user?.role === "admin");
       }}
       className={clsx(
         "flex items-start gap-3 cursor-pointer hover:bg-[#F3F6F8] p-3 transition-colors border-l-[3px]",
@@ -87,6 +97,7 @@ function OverlayChatListItem({
 }
 
 function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => void }) {
+  const dispatch = useAppDispatch();
   const { userId: authUserId, user: currentUser } = useAppSelector((state) => state.auth);
   const currentUserId = authUserId || currentUser?._id || undefined;
   const isAdminChatUser = currentUser?.role === "admin";
@@ -94,11 +105,43 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
   const [isAcceptedManually, setIsAcceptedManually] = useState(false);
   const [isFbSending, setIsFbSending] = useState(false);
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: partnerProfile, isSuccess: partnerProfileReady } = useGetProfileQuery(chat.id, {
-    skip: !chat.id || (!currentUser?.isLinkedinVerified && !isAdminChatUser),
+    skip: !chat.id,
   });
+
+  const partnerUser = partnerProfile?.user;
+  const displayName = useMemo(() => {
+    if (partnerUser) {
+      const full = `${partnerUser.firstName || ""} ${partnerUser.lastName || ""}`.trim();
+      return full || partnerUser.email || chat.name;
+    }
+    if (chat.name && chat.name !== "User") return chat.name;
+    return partnerProfileReady ? chat.name : "…";
+  }, [partnerUser, partnerProfileReady, chat.name]);
+
+  const displayAvatar = useMemo(
+    () => resolveUserProfileImageUrl(partnerUser, displayName) || chat.avatar,
+    [partnerUser, displayName, chat.avatar]
+  );
+
+  useEffect(() => {
+    if (!partnerUser || !chat.id) return;
+    const full = `${partnerUser.firstName || ""} ${partnerUser.lastName || ""}`.trim();
+    const name = full || partnerUser.email;
+    if (!name || name === "User") return;
+    dispatch(
+      updateActiveChatProfile({
+        id: chat.id,
+        name,
+        avatar: resolveUserProfileImageUrl(partnerUser, name),
+      })
+    );
+  }, [partnerUser, chat.id, dispatch]);
 
   const useFb = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, chat.id);
@@ -182,15 +225,25 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
       toast.error("Use Contact Admin for support");
       return;
     }
-    if (currentUser?.isLinkedinVerified && !isAdminChatUser) {
-      if (!partnerProfileReady || !partnerProfile?.user) {
-        toast.error("Please wait a moment.");
-        return;
-      }
-      if (!partnerProfile.user.isLinkedinVerified) {
-        setLinkedinGuardOpen(true);
-        return;
-      }
+    if (isSelfChatPartner(currentUserId, chat.id)) {
+      toast.error("You cannot chat with yourself");
+      return;
+    }
+
+    const blockReason = getLinkedinChatBlockReason(
+      currentUser?.isLinkedinVerified,
+      partnerUser?.isLinkedinVerified,
+      isAdminChatUser,
+      partnerUser?.role === "admin"
+    );
+    if (blockReason) {
+      setLinkedinGuardReason(blockReason);
+      setLinkedinGuardOpen(true);
+      return;
+    }
+    if (!partnerProfileReady || !partnerUser) {
+      toast.error("Please wait a moment.");
+      return;
     }
     if (isFirebaseConfigured() && currentUserId) {
       const db = getFirestoreDb();
@@ -225,6 +278,14 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
 
   const sendBusy = isFbSending;
 
+  const chatBlockedReason = getLinkedinChatBlockReason(
+    currentUser?.isLinkedinVerified,
+    partnerUser?.isLinkedinVerified,
+    isAdminChatUser,
+    partnerUser?.role === "admin"
+  );
+  const canSendInChat = !chatBlockedReason && !isSenderPending;
+
   return (
     <>
     <div className="w-[300px] bg-white rounded-t-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-[#E0E0E0] overflow-hidden flex flex-col pointer-events-auto">
@@ -233,14 +294,14 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
         <div className="flex items-center gap-2">
           <div className="relative">
             <div className="w-8 h-8 rounded-full overflow-hidden">
-              <ImageWithFallback src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+              <ImageWithFallback src={displayAvatar} alt={displayName} className="w-full h-full object-cover" />
             </div>
             {chat.status === "online" && (
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#4ADE80] border-2 border-white rounded-full"></div>
             )}
           </div>
           <div className="flex flex-col">
-            <span className="text-[13px] font-bold text-[#1A1A2E] leading-tight truncate w-32">{chat.name}</span>
+            <span className="text-[13px] font-bold text-[#1A1A2E] leading-tight truncate w-32">{displayName}</span>
             <span className="text-[11px] text-[#4ADE80] font-medium leading-tight">
               {isRecipientPending ? "Sent you a request" : "Active now"}
             </span>
@@ -317,28 +378,52 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
 
       {/* Input Area */}
       {!isSenderPending && (
-        <div className="p-2 bg-[#F0F2F5] flex items-center gap-2 border-t border-[#E0E0E0]">
-          <Smile className="w-5 h-5 text-[#54656f] cursor-pointer" />
-          <Paperclip className="w-5 h-5 text-[#54656f] cursor-pointer" />
-          <div className="flex-1 bg-white rounded-lg px-3 py-1.5 border border-[#E0E0E0]">
-            <input 
-              type="text" 
-              placeholder={isRecipientPending ? "Click Accept to reply" : "Type a message"} 
-              disabled={isRecipientPending}
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              className="w-full text-[13px] bg-transparent focus:outline-none placeholder:text-[#94a3b8] disabled:opacity-50"
+        <div className="p-2 bg-[#F0F2F5] flex flex-col gap-2 border-t border-[#E0E0E0]">
+          {chatBlockedReason && partnerProfileReady && (
+            <p className="text-[11px] text-[#64748B] px-1 leading-snug">
+              {chatBlockedReason === "sender_not_verified"
+                ? "Verify with LinkedIn on your profile to send messages."
+                : "This member is not LinkedIn verified. Messaging is not available."}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <Smile className="w-5 h-5 text-[#54656f] cursor-pointer opacity-50" />
+            <Paperclip className="w-5 h-5 text-[#54656f] cursor-pointer opacity-50" />
+            <div className="flex-1 bg-white rounded-lg px-3 py-1.5 border border-[#E0E0E0]">
+              <input
+                type="text"
+                placeholder={
+                  !canSendInChat
+                    ? "Messaging unavailable"
+                    : isRecipientPending
+                      ? "Click Accept to reply"
+                      : "Type a message"
+                }
+                disabled={!canSendInChat || isRecipientPending}
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && canSendInChat && handleSend()}
+                className="w-full text-[13px] bg-transparent focus:outline-none placeholder:text-[#94a3b8] disabled:opacity-50"
+              />
+            </div>
+            <Send
+              className={clsx(
+                "w-5 h-5 transition-colors",
+                messageInput.trim() && canSendInChat && !sendBusy
+                  ? "text-[#0A66C2] cursor-pointer"
+                  : "text-[#54656f] opacity-50"
+              )}
+              onClick={() => canSendInChat && handleSend()}
             />
           </div>
-          <Send 
-            className={clsx("w-5 h-5 cursor-pointer transition-colors", (messageInput.trim() && !isRecipientPending && !sendBusy) ? "text-[#0A66C2]" : "text-[#54656f]")} 
-            onClick={handleSend}
-          />
         </div>
       )}
     </div>
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinGuardOpen}
+      onOpenChange={setLinkedinGuardOpen}
+      reason={linkedinGuardReason}
+    />
     </>
   );
 }
@@ -346,8 +431,29 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
 export function MessagingOverlay() {
   const dispatch = useAppDispatch();
   const { activeChats, isMessagingBarExpanded } = useAppSelector((state) => state.chat);
-  const { user: currentUser } = useAppSelector((state) => state.auth);
+  const { user: currentUser, isAuthenticated } = useAppSelector((state) => state.auth);
   const [linkedinListGuardOpen, setLinkedinListGuardOpen] = useState(false);
+  const [linkedinListGuardReason, setLinkedinListGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
+
+  const canUseMessaging = senderCanUseLinkedinChat(
+    currentUser?.isLinkedinVerified,
+    currentUser?.role === "admin"
+  );
+
+  const handleMessagingBarClick = () => {
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (!canUseMessaging) {
+      setLinkedinListGuardReason("sender_not_verified");
+      setLinkedinListGuardOpen(true);
+      return;
+    }
+    dispatch(toggleMessagingBar());
+  };
   const { recentChats, inboxReady } = useInboxPreviewChats();
 
   const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
@@ -387,12 +493,12 @@ export function MessagingOverlay() {
     recentChats.forEach(chat => {
         const prevCount = lastUnreadCountRef.current[chat.id] || 0;
         
-        if (chat.unreadCount > prevCount) {
+        if (chat.unreadCount > prevCount && canUseMessaging) {
             if (!activeChats.find(ac => ac.id === chat.id)) {
-                dispatch(openChat({ 
-                    id: chat.id, 
-                    name: chat.name, 
-                    avatar: chat.avatar 
+                dispatch(openChat({
+                    id: chat.id,
+                    name: chat.name,
+                    avatar: chat.avatar,
                 }));
             }
             hasNewMessage = true;
@@ -404,7 +510,7 @@ export function MessagingOverlay() {
         const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
         audio.play().catch(() => undefined);
     }
-  }, [recentChats, activeChats, dispatch, isHomePage, inboxReady]);
+  }, [recentChats, activeChats, dispatch, isHomePage, inboxReady, canUseMessaging]);
 
   // Only show messaging overlay on home page per user request
   if (!isHomePage) return null;
@@ -425,7 +531,7 @@ export function MessagingOverlay() {
 
       <div className="w-72 bg-white rounded-t-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-[#E0E0E0] overflow-hidden pointer-events-auto">
         <button 
-          onClick={() => dispatch(toggleMessagingBar())}
+          onClick={handleMessagingBarClick}
           className="p-2 flex items-center justify-between cursor-pointer w-full text-left bg-white hover:bg-[#F3F6F8] transition-colors border-b border-[#E0E0E0]"
         >
           <div className="flex items-center gap-2">
@@ -438,14 +544,12 @@ export function MessagingOverlay() {
             <span className="font-bold text-[14px] text-[#1A1A2E]">Messaging</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="p-1.5 hover:bg-black/5 rounded-full transition-colors"><MoreHorizontal className="w-4 h-4 text-[#666666]" /></span>
-            <span className="p-1.5 hover:bg-black/5 rounded-full transition-colors"><Edit3 className="w-4 h-4 text-[#666666]" /></span>
             {isMessagingBarExpanded ? <ChevronDown className="w-4 h-4 text-[#666666]" /> : <ChevronUp className="w-4 h-4 text-[#666666]" />}
           </div>
         </button>
 
         <AnimatePresence>
-          {isMessagingBarExpanded && (
+          {isMessagingBarExpanded && canUseMessaging && (
             <motion.div 
               initial={{ height: 0 }}
               animate={{ height: 420 }}
@@ -492,8 +596,19 @@ export function MessagingOverlay() {
                     key={chat.id}
                     chat={chat}
                     isActive={Boolean(activeChats.find((c) => c.id === chat.id))}
-                    onOpen={(resolvedName, resolvedAvatar, partnerLinkedinVerified) => {
-                      if (isLinkedinOnlyChatBlocked(currentUser?.isLinkedinVerified, partnerLinkedinVerified, currentUser?.role === "admin")) {
+                    onOpen={(resolvedName, resolvedAvatar, partnerLinkedinVerified, partnerIsAdmin) => {
+                      if (isSelfChatPartner(currentUser?._id, chat.id)) {
+                        toast.error("You cannot chat with yourself");
+                        return;
+                      }
+                      const reason = getLinkedinChatBlockReason(
+                        currentUser?.isLinkedinVerified,
+                        partnerLinkedinVerified,
+                        currentUser?.role === "admin",
+                        partnerIsAdmin
+                      );
+                      if (reason) {
+                        setLinkedinListGuardReason(reason);
                         setLinkedinListGuardOpen(true);
                         return;
                       }
@@ -510,7 +625,11 @@ export function MessagingOverlay() {
         </AnimatePresence>
       </div>
     </div>
-    <LinkedinRecipientNotVerifiedDialog open={linkedinListGuardOpen} onOpenChange={setLinkedinListGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinListGuardOpen}
+      onOpenChange={setLinkedinListGuardOpen}
+      reason={linkedinListGuardReason}
+    />
     </>
   );
 }

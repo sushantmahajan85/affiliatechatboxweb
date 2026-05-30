@@ -1,33 +1,43 @@
 "use client";
 import { clsx } from "clsx";
 import { ChevronRight, Handshake, X } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { GrLinkedin } from "react-icons/gr";
+import { useRouter } from "next/navigation";
 import { useGetPartnersQuery } from "@/store/endpoints/partners";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
 
+const LINKEDIN_COMMUNITY_URL =
+  process.env.NEXT_PUBLIC_LINKEDIN_COMMUNITY_URL ||
+  "https://www.linkedin.com/company/affiliate-chat-box";
 
-const RECENT_CHATS = [
-  { name: "John Doe", status: "online", lastMsg: "Hey, check the Q4 stats!", avatar: "https://images.unsplash.com/photo-1672685667592-0392f458f46f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtYW4lMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDF8fHx8MTc3NDU4NzY5OXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral" },
-  { name: "Sarah Miller", status: "offline", lastMsg: "The ROI looks great.", avatar: "https://images.unsplash.com/photo-1610387694365-19fafcc86d86?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxidXNpbmVzcyUyMG9mZmljZSUyMHByb2Zlc3Npb25hbCUyMHdvbWFuJTIwcG9ydHJhaXR8ZW58MXx8fHwxNzc0NjAxMzA3fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral" },
-];
 
 interface PartnersSidebarProps {
   isOpen?: boolean;
   onClose?: () => void;
-  activeChats: any[];
-  setActiveChats: (chats: any[]) => void;
 }
 
-export function PartnersSidebar({ isOpen, onClose, activeChats, setActiveChats }: PartnersSidebarProps) {
-  const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
+export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
   const router = useRouter();
-  const pathname = usePathname();
-
-  const isHomePage = pathname === "/";
+  const dispatch = useAppDispatch();
+  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
 
   const { data, isLoading } = useGetPartnersQuery();
   const partners = data?.allpartners?.slice(0, 5) || [];
+
+  const canAccessLinkedinCommunity =
+    isAuthenticated && (user?.isLinkedinVerified || user?.role === "admin");
+
+  const handleJoinCommunity = () => {
+    if (!canAccessLinkedinCommunity) {
+      dispatch(openAuthModal());
+      if (window.innerWidth < 1280) onClose?.();
+      return;
+    }
+    window.open(LINKEDIN_COMMUNITY_URL, "_blank", "noopener,noreferrer");
+    if (window.innerWidth < 1280) onClose?.();
+  };
 
   return (
     <aside className={clsx(
@@ -120,18 +130,26 @@ export function PartnersSidebar({ isOpen, onClose, activeChats, setActiveChats }
       {/* Bottom Sticky Section */}
       <div className="shrink-0 flex flex-col gap-2 p-4 bg-[#F8FAFC] border-t border-[#E0E0E0]">
         {/* Join Community Section */}
-        <div className="bg-[#0A7EA4] rounded-[14px] p-4 text-white shadow-[0_8px_16px_rgba(10,126,164,0.2)] flex items-center justify-between group cursor-pointer hover:bg-[#084e96] transition-all relative -top-10 active:scale-[0.98] mx-[0px] mt-[65px] mb-[8px]">
+        <button
+          type="button"
+          onClick={handleJoinCommunity}
+          className="bg-[#0A7EA4] rounded-[14px] p-4 text-white shadow-[0_8px_16px_rgba(10,126,164,0.2)] flex items-center justify-between group cursor-pointer hover:bg-[#084e96] transition-all relative -top-10 active:scale-[0.98] mx-[0px] mt-[65px] mb-[8px] w-full text-left"
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-              {/* <Linkedin className="w-5 h-5" /> */}
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+              <GrLinkedin className="w-5 h-5" />
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col min-w-0">
               <span className="text-[13px] font-bold">Join Community</span>
-              <span className="text-[11px] opacity-80">Follow us on LinkedIn</span>
+              <span className="text-[11px] opacity-80">
+                {canAccessLinkedinCommunity
+                  ? "Follow us on LinkedIn"
+                  : "Sign in with LinkedIn to join"}
+              </span>
             </div>
           </div>
-          <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-        </div>
+          <ChevronRight className="w-4 h-4 shrink-0 group-hover:translate-x-1 transition-transform" />
+        </button>
       </div>
     </aside>
   );

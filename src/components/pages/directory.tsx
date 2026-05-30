@@ -1,5 +1,5 @@
 "use client";
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useGetAllUsersQuery } from "@/store/endpoints/members";
 import { clsx } from "clsx";
@@ -10,7 +10,7 @@ import { useState } from "react";
 import { FaGoogle } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { useAppDispatch } from "@/store/hooks";
-import { openConnectionModal } from "@/store/uiSlice";
+import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 
 // Helper to convert country code (e.g., "IN") to flag emoji
 const getFlagEmoji = (countryCode: string) => {
@@ -25,7 +25,7 @@ const getFlagEmoji = (countryCode: string) => {
 import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
-import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 
 export function DirectoryPage() {
@@ -40,13 +40,31 @@ export function DirectoryPage() {
   });
 
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
 
-  const handleStartChat = (memberId: string, memberLinkedinVerified: boolean) => {
+  const handleStartChat = (
+    memberId: string,
+    memberLinkedinVerified: boolean,
+    memberIsAdmin?: boolean
+  ) => {
     if (!currentUser) {
-      // Not logged in, can't chat
+      dispatch(openAuthModal());
       return;
     }
-    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified, currentUser.role === "admin")) {
+    if (isSelfChatPartner(currentUser._id, memberId)) {
+      toast.error("You cannot chat with yourself");
+      return;
+    }
+    const blockReason = getLinkedinChatBlockReason(
+      currentUser.isLinkedinVerified,
+      memberLinkedinVerified,
+      currentUser.role === "admin",
+      memberIsAdmin
+    );
+    if (blockReason) {
+      setLinkedinGuardReason(blockReason);
       setLinkedinGuardOpen(true);
       return;
     }
@@ -77,6 +95,7 @@ export function DirectoryPage() {
     flag: u.flag?.length === 2 ? getFlagEmoji(u.flag) : (u.flag || "🌐"),
     isGoogleVerified: u.isGoogleVerified || false,
     isLinkedinVerified: u.isLinkedinVerified || false,
+    isAdmin: u.role === "admin",
     verified: u.isverified || false,
     email: u.email
   }));
@@ -204,7 +223,7 @@ export function DirectoryPage() {
 
               <div className="w-full pt-4 border-t border-[#F3F4F6]">
                 <button 
-                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified)}
+                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified, member.isAdmin)}
                   className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -271,7 +290,11 @@ export function DirectoryPage() {
       )}
     </div>
 
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinGuardOpen}
+      onOpenChange={setLinkedinGuardOpen}
+      reason={linkedinGuardReason}
+    />
     </>
   );
 }

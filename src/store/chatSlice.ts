@@ -23,18 +23,33 @@ const chatSlice = createSlice({
   initialState,
   reducers: {
     openChat: (state, action: PayloadAction<ActiveChat>) => {
-      const exists = state.activeChats.find(chat => chat.id === action.payload.id);
+      const exists = state.activeChats.find((chat) => chat.id === action.payload.id);
       if (!exists) {
-        // Keep only the 3 most recent chats
         state.activeChats = [action.payload, ...state.activeChats].slice(0, 3);
       } else {
-        // Move to front
+        const merged = {
+          ...exists,
+          ...action.payload,
+          name:
+            action.payload.name !== "User" ? action.payload.name : exists.name,
+          avatar: action.payload.avatar || exists.avatar,
+        };
         state.activeChats = [
-          action.payload, 
-          ...state.activeChats.filter(chat => chat.id !== action.payload.id)
+          merged,
+          ...state.activeChats.filter((chat) => chat.id !== action.payload.id),
         ];
       }
       state.isMessagingBarExpanded = true;
+    },
+    updateActiveChatProfile: (
+      state,
+      action: PayloadAction<{ id: string; name: string; avatar: string }>
+    ) => {
+      const chat = state.activeChats.find((c) => c.id === action.payload.id);
+      if (chat) {
+        chat.name = action.payload.name;
+        chat.avatar = action.payload.avatar;
+      }
     },
     closeChat: (state, action: PayloadAction<string>) => {
       state.activeChats = state.activeChats.filter(chat => chat.id !== action.payload);
@@ -48,5 +63,11 @@ const chatSlice = createSlice({
   },
 });
 
-export const { openChat, closeChat, setMessagingBarExpanded, toggleMessagingBar } = chatSlice.actions;
+export const {
+  openChat,
+  closeChat,
+  setMessagingBarExpanded,
+  toggleMessagingBar,
+  updateActiveChatProfile,
+} = chatSlice.actions;
 export default chatSlice.reducer;

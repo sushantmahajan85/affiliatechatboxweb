@@ -1,5 +1,5 @@
 "use client";
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import {
   useFirebasePhoneVerifyMutation,
@@ -30,10 +30,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { openConnectionModal } from "@/store/uiSlice";
+import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
-import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
+import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { 
   FiAlertCircle, 
@@ -121,11 +121,33 @@ export function ProfilePage({ id }: { id?: string }) {
 
   const showProfileDetailSections = isOwnProfile || hasConnectedChat;
 
+  const { data, isLoading, isError, refetch } = useGetProfileQuery(profileId, {
+    skip: !profileId,
+  });
+
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
 
   const handleStartChat = () => {
-    if (!currentUserId) return;
-    if (isLinkedinOnlyChatBlocked(viewerUser?.isLinkedinVerified, profile.linkedinVerified, viewerUser?.role === "admin")) {
+    if (!currentUserId) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (isSelfChatPartner(currentUserId, profileId)) {
+      toast.error("You cannot chat with yourself");
+      return;
+    }
+
+    const blockReason = getLinkedinChatBlockReason(
+      viewerUser?.isLinkedinVerified,
+      data?.user?.isLinkedinVerified,
+      viewerUser?.role === "admin",
+      data?.user?.role === "admin"
+    );
+    if (blockReason) {
+      setLinkedinGuardReason(blockReason);
       setLinkedinGuardOpen(true);
       return;
     }
@@ -136,10 +158,6 @@ export function ProfilePage({ id }: { id?: string }) {
       dispatch(openConnectionModal(profileId));
     }
   };
-
-  const { data, isLoading, isError, refetch } = useGetProfileQuery(profileId, {
-    skip: !profileId,
-  });
 
   const [updateProfile, { isLoading: isUpdating }] = useRegisterUserMutation();
   const [googleVerifyMutate, { isLoading: isGoogleVerifying }] = useGoogleVerifyMutation();
@@ -1037,7 +1055,11 @@ export function ProfilePage({ id }: { id?: string }) {
         )}
       </DialogContent>
     </Dialog>
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinGuardOpen}
+      onOpenChange={setLinkedinGuardOpen}
+      reason={linkedinGuardReason}
+    />
     </>
   );
 }
