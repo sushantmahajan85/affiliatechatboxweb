@@ -1,4 +1,5 @@
 import type { Firestore } from "firebase/firestore";
+import { notifyFirestoreChatPush } from "@/lib/chat-push-notify";
 import {
   collection,
   doc,
@@ -182,9 +183,10 @@ export async function sendFirestoreChatMessage(
     messageType: "text" | "image" | "audio";
     imageUrl?: string | null;
     audioUrl?: string | null;
+    authToken?: string;
   }
 ): Promise<string> {
-  const { currentUserId, receiverId, message, messageType, imageUrl, audioUrl } = params;
+  const { currentUserId, receiverId, message, messageType, imageUrl, audioUrl, authToken } = params;
   const chatRoomId = buildChatRoomId(currentUserId, receiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 
@@ -231,6 +233,14 @@ export async function sendFirestoreChatMessage(
     txn.update(chatRef, updates);
   });
 
+  void notifyFirestoreChatPush({
+    senderId: currentUserId,
+    receiverId,
+    message,
+    messageType,
+    jwt: authToken,
+  });
+
   return chatRoomId;
 }
 
@@ -243,9 +253,10 @@ export async function sendFirestoreAdminMessage(
     message: string;
     messageType: "text" | "image";
     imageUrl?: string | null;
+    authToken?: string;
   }
 ): Promise<string> {
-  const { currentUserId, adminReceiverId, message, messageType, imageUrl } = params;
+  const { currentUserId, adminReceiverId, message, messageType, imageUrl, authToken } = params;
   const chatRoomId = buildChatRoomId(currentUserId, adminReceiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 
@@ -289,6 +300,14 @@ export async function sendFirestoreAdminMessage(
       updates.unreadCountFrom = increment(1);
     }
     txn.update(chatRef, updates);
+  });
+
+  void notifyFirestoreChatPush({
+    senderId: currentUserId,
+    receiverId: adminReceiverId,
+    message,
+    messageType,
+    jwt: authToken,
   });
 
   return chatRoomId;

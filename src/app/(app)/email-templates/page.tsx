@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { appendEmailDisclaimer } from "@/lib/email-disclaimer";
 
 // ─── Email Templates ─────────────────────────────────────────────────────────
 
@@ -521,7 +522,7 @@ export default function EmailTemplatesPage() {
               <div className="mx-auto max-w-[640px]">
                 <iframe
                   key={activeEmailId + JSON.stringify(currentEmailVars)}
-                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f3f4f6;">${activeEmail.html(currentEmailVars)}</body></html>`}
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f3f4f6;">${appendEmailDisclaimer(activeEmail.html(currentEmailVars))}</body></html>`}
                   className="w-full rounded-xl border border-gray-200 bg-white shadow-sm"
                   style={{ minHeight: 500, border: "none" }}
                   onLoad={(e) => {

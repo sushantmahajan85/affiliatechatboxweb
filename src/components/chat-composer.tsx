@@ -27,6 +27,7 @@ type ChatComposerProps = {
   isSending?: boolean;
   isUploading?: boolean;
   placeholder?: string;
+  variant?: "default" | "compact";
 };
 
 export function ChatComposer({
@@ -39,7 +40,9 @@ export function ChatComposer({
   isSending = false,
   isUploading = false,
   placeholder = "Type a message...",
+  variant = "default",
 }: ChatComposerProps) {
+  const isCompact = variant === "compact";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewCaptionRef = useRef<HTMLInputElement>(null);
   const [pendingImage, setPendingImage] = useState<PendingImage | null>(null);
@@ -119,7 +122,7 @@ export function ChatComposer({
     <>
       {pendingImage ? (
         <div
-          className="fixed inset-0 z-[100] flex flex-col bg-[#0b141a] text-white"
+          className="fixed inset-0 z-[200] flex flex-col bg-[#0b141a] text-white"
           role="dialog"
           aria-modal="true"
           aria-label="Image preview"
@@ -188,7 +191,14 @@ export function ChatComposer({
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 md:gap-4 max-w-4xl mx-auto bg-[#F5F7FB] p-2 rounded-2xl border border-[#E0E0E0] w-full">
+      <div
+        className={clsx(
+          "flex items-center w-full",
+          isCompact
+            ? "gap-1"
+            : "gap-2 md:gap-4 max-w-4xl mx-auto bg-[#F5F7FB] p-2 rounded-2xl border border-[#E0E0E0]"
+        )}
+      >
         <input
           ref={fileInputRef}
           type="file"
@@ -200,7 +210,12 @@ export function ChatComposer({
           type="button"
           disabled={busy}
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all disabled:opacity-40"
+          className={clsx(
+            "transition-all disabled:opacity-40 shrink-0",
+            isCompact
+              ? "p-1 text-[#54656f] hover:text-[#0A66C2]"
+              : "p-2 text-[#757575] hover:bg-white rounded-xl"
+          )}
           aria-label="Attach image"
           title="Attach image"
         >
@@ -211,28 +226,52 @@ export function ChatComposer({
           )}
         </button>
 
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (canSend) onSend();
-            }
-          }}
-          placeholder={placeholder}
-          disabled={busy}
-          className="flex-1 bg-transparent border-none focus:outline-none text-[15px] placeholder:text-[#9E9E9E] px-2 disabled:opacity-50"
-        />
+        {isCompact ? (
+          <div className="flex-1 bg-white rounded-lg px-2 py-1 border border-[#E0E0E0] min-w-0">
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (canSend) onSend();
+                }
+              }}
+              placeholder={placeholder}
+              disabled={busy}
+              className="w-full text-[13px] bg-transparent border-none focus:outline-none placeholder:text-[#94a3b8] disabled:opacity-50"
+            />
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (canSend) onSend();
+              }
+            }}
+            placeholder={placeholder}
+            disabled={busy}
+            className="flex-1 bg-transparent border-none focus:outline-none text-[15px] placeholder:text-[#9E9E9E] px-2 disabled:opacity-50"
+          />
+        )}
 
-        <div className="flex items-center gap-1 pr-1">
+        <div className={clsx("flex items-center shrink-0", isCompact ? "gap-0" : "gap-1 pr-1")}>
           <Popover>
             <PopoverTrigger asChild>
               <button
                 type="button"
                 disabled={busy}
-                className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all disabled:opacity-40"
+                className={clsx(
+                  "transition-all disabled:opacity-40",
+                  isCompact
+                    ? "p-1 text-[#54656f] hover:text-[#0A66C2]"
+                    : "p-2 text-[#757575] hover:bg-white rounded-xl"
+                )}
                 aria-label="Insert emoji"
                 title="Emoji"
               >
@@ -264,8 +303,16 @@ export function ChatComposer({
             onClick={onSend}
             disabled={!canSend}
             className={clsx(
-              "p-2.5 rounded-xl transition-all shadow-sm active:scale-95",
-              canSend ? "bg-[#0A7EA4] text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"
+              "transition-all",
+              isCompact
+                ? clsx(
+                    "p-1",
+                    canSend ? "text-[#0A66C2]" : "text-[#54656f] opacity-50 cursor-not-allowed"
+                  )
+                : clsx(
+                    "p-2.5 rounded-xl shadow-sm active:scale-95",
+                    canSend ? "bg-[#0A7EA4] text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  )
             )}
             aria-label="Send message"
           >

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { appendEmailDisclaimer } from "@/lib/email-disclaimer";
 
 const BRAND = "#0A7EA4";
 
@@ -294,7 +295,7 @@ export default function EmailTemplatesPrintPage() {
 
           <div className="preview-label">Email Preview</div>
           <div className="preview-box">
-            <div dangerouslySetInnerHTML={{ __html: t.html }} />
+            <div dangerouslySetInnerHTML={{ __html: appendEmailDisclaimer(t.html) }} />
           </div>
         </div>
       ))}

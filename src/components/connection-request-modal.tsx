@@ -15,7 +15,7 @@ export function ConnectionRequestModal() {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const { isConnectionModalOpen, connectionTargetId } = useAppSelector((state) => state.ui);
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, token } = useAppSelector((state) => state.auth);
 
   const [message, setMessage] = useState("Hi, I'd like to connect with you!");
   const [fbSending, setFbSending] = useState(false);
@@ -78,6 +78,7 @@ export function ConnectionRequestModal() {
           receiverId: connectionTargetId!,
           message: message.trim(),
           messageType: "text",
+          authToken: token ?? undefined,
         });
         toast.success("Connection request sent successfully!");
         dispatch(closeConnectionModal());

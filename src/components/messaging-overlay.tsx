@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { 
-  X, Smile, Paperclip, Send, 
-  CheckCheck, Search,
-  ChevronDown, ChevronUp, Info
+  X, CheckCheck, Search,
+  ChevronDown, ChevronUp, Info, Maximize2
 } from "lucide-react";
+import { ChatComposer } from "@/components/chat-composer";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { closeChat, openChat, toggleMessagingBar, updateActiveChatProfile } from "@/store/chatSlice";
@@ -18,8 +18,13 @@ import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { useInboxPreviewChats } from "@/hooks/use-inbox-preview-chats";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
-import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
-import { sendFirestoreChatMessage, isAdminSupportChatPartner } from "@/lib/firebase-chat";
+import { getFirebaseStorage, getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
+import {
+  buildChatRoomId,
+  sendFirestoreChatMessage,
+  isAdminSupportChatPartner,
+  uploadFirestoreChatImage,
+} from "@/lib/firebase-chat";
 import {
   getLinkedinChatBlockReason,
   isSelfChatPartner,
@@ -98,12 +103,14 @@ function OverlayChatListItem({
 
 function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => void }) {
   const dispatch = useAppDispatch();
-  const { userId: authUserId, user: currentUser } = useAppSelector((state) => state.auth);
+  const router = useRouter();
+  const { userId: authUserId, user: currentUser, token } = useAppSelector((state) => state.auth);
   const currentUserId = authUserId || currentUser?._id || undefined;
   const isAdminChatUser = currentUser?.role === "admin";
   const [messageInput, setMessageInput] = useState("");
   const [isAcceptedManually, setIsAcceptedManually] = useState(false);
   const [isFbSending, setIsFbSending] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
   const [linkedinGuardReason, setLinkedinGuardReason] = useState<
     "sender_not_verified" | "recipient_not_verified" | null
@@ -204,79 +211,24 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
         text: m.text,
         isMe: m.sender === "me",
         time: m.timeLabel,
+        messageType: m.messageType,
+        imageUrl: m.imageUrl,
       }));
     }
     if (!historyData?.history) return [];
-    return historyData.history.map(m => ({
+    return historyData.history.map((m) => ({
       id: m._id,
       text: m.message,
       isMe: String(m.senderId) === String(currentUserId),
-      time: format(new Date(m.timestamp), "p")
+      time: format(new Date(m.timestamp), "p"),
+      messageType: "text" as const,
+      imageUrl: null as string | null,
     }));
   }, [useFb, fbChat.messages, historyData, currentUserId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  const handleSend = async () => {
-    if (!messageInput.trim() || !currentUserId || isSenderPending) return;
-    if (isAdminSupportChatPartner(String(chat.id))) {
-      toast.error("Use Contact Admin for support");
-      return;
-    }
-    if (isSelfChatPartner(currentUserId, chat.id)) {
-      toast.error("You cannot chat with yourself");
-      return;
-    }
-
-    const blockReason = getLinkedinChatBlockReason(
-      currentUser?.isLinkedinVerified,
-      partnerUser?.isLinkedinVerified,
-      isAdminChatUser,
-      partnerUser?.role === "admin"
-    );
-    if (blockReason) {
-      setLinkedinGuardReason(blockReason);
-      setLinkedinGuardOpen(true);
-      return;
-    }
-    if (!partnerProfileReady || !partnerUser) {
-      toast.error("Please wait a moment.");
-      return;
-    }
-    if (isFirebaseConfigured() && currentUserId) {
-      const db = getFirestoreDb();
-      if (!db) {
-        toast.error("Firebase is not ready");
-        return;
-      }
-      if (isFbSending) return;
-      const text = messageInput.trim();
-      setMessageInput("");
-      setIsFbSending(true);
-      try {
-        if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
-          await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
-        }
-        await sendFirestoreChatMessage(db, {
-          currentUserId,
-          receiverId: chat.id,
-          message: text,
-          messageType: "text",
-        });
-      } catch (err) {
-        console.error("Failed to send message from popup:", err);
-        toast.error("Failed to send");
-      } finally {
-        setIsFbSending(false);
-      }
-      return;
-    }
-    toast.error("Firebase chat is not configured");
-  };
-
-  const sendBusy = isFbSending;
 
   const chatBlockedReason = getLinkedinChatBlockReason(
     currentUser?.isLinkedinVerified,
@@ -285,6 +237,119 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
     partnerUser?.role === "admin"
   );
   const canSendInChat = !chatBlockedReason && !isSenderPending;
+
+  const validateChatSend = (): boolean => {
+    if (!currentUserId || isSenderPending) return false;
+    if (isAdminSupportChatPartner(String(chat.id))) {
+      toast.error("Use Contact Admin for support");
+      return false;
+    }
+    if (isSelfChatPartner(currentUserId, chat.id)) {
+      toast.error("You cannot chat with yourself");
+      return false;
+    }
+    if (chatBlockedReason) {
+      setLinkedinGuardReason(chatBlockedReason);
+      setLinkedinGuardOpen(true);
+      return false;
+    }
+    if (!partnerProfileReady || !partnerUser) {
+      toast.error("Please wait a moment.");
+      return false;
+    }
+    return true;
+  };
+
+  const sendChatPayload = async (payload: {
+    message: string;
+    messageType: "text" | "image";
+    imageUrl?: string | null;
+  }): Promise<boolean> => {
+    if (!currentUserId) return false;
+    if (!isFirebaseConfigured()) {
+      toast.error("Firebase chat is not configured");
+      return false;
+    }
+    const db = getFirestoreDb();
+    if (!db) {
+      toast.error("Firebase is not ready");
+      return false;
+    }
+    try {
+      if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
+        await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+      }
+      await sendFirestoreChatMessage(db, {
+        currentUserId,
+        receiverId: chat.id,
+        message: payload.message,
+        messageType: payload.messageType,
+        imageUrl: payload.imageUrl,
+        authToken: token ?? undefined,
+      });
+      return true;
+    } catch (err) {
+      console.error("Failed to send message from popup:", err);
+      toast.error(payload.messageType === "image" ? "Failed to send image" : "Failed to send");
+      return false;
+    }
+  };
+
+  const handleSend = async () => {
+    if (!messageInput.trim() || !validateChatSend()) return;
+    if (isFbSending) return;
+
+    const text = messageInput.trim();
+    setMessageInput("");
+    setIsFbSending(true);
+    const ok = await sendChatPayload({ message: text, messageType: "text" });
+    if (!ok) setMessageInput(text);
+    setIsFbSending(false);
+  };
+
+  const handleAttachImage = async (file: File, caption: string): Promise<boolean> => {
+    if (!validateChatSend() || !currentUserId) return false;
+
+    const storage = getFirebaseStorage();
+    const chatRoomId = buildChatRoomId(currentUserId, chat.id);
+    if (!storage) {
+      toast.error("Firebase is not ready");
+      return false;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const imageUrl = await uploadFirestoreChatImage(storage, {
+        userId: currentUserId,
+        chatRoomId,
+        data: buf,
+        contentType: file.type || "image/jpeg",
+      });
+      return await sendChatPayload({
+        message: caption,
+        messageType: "image",
+        imageUrl,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send image");
+      return false;
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const composerPlaceholder = !canSendInChat
+    ? "Messaging unavailable"
+    : isRecipientPending
+      ? "Click Accept to reply"
+      : "Type a message";
+
+  const handleOpenInInbox = () => {
+    router.push(`/chats?userId=${encodeURIComponent(chat.id)}`);
+    onClose();
+  };
 
   return (
     <>
@@ -308,7 +373,16 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
           </div>
         </div>
         <div className="flex items-center gap-1 text-[#666666]">
-          <button onClick={onClose} className="p-1.5 hover:bg-black/5 rounded-full">
+          <button
+            type="button"
+            onClick={handleOpenInInbox}
+            className="p-1.5 hover:bg-black/5 rounded-full"
+            aria-label="Open in inbox"
+            title="Open in inbox"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+          <button type="button" onClick={onClose} className="p-1.5 hover:bg-black/5 rounded-full" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -332,7 +406,23 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
                 "px-2.5 py-1.5 rounded-lg shadow-sm text-[12px] text-[#111b21] max-w-[85%]",
                 msg.isMe ? "bg-[#D9FDD3] rounded-tr-none" : "bg-white rounded-tl-none"
               )}>
-                {msg.text}
+                {msg.messageType === "image" && msg.imageUrl ? (
+                  <a
+                    href={msg.imageUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block mb-1"
+                  >
+                    <ImageWithFallback
+                      src={msg.imageUrl}
+                      alt=""
+                      className="max-w-full rounded-md max-h-[140px] object-cover"
+                    />
+                  </a>
+                ) : null}
+                {msg.text ? (
+                  <span className="whitespace-pre-wrap">{msg.text}</span>
+                ) : null}
                 <div className="flex items-center justify-end gap-1 mt-1">
                   <span className="text-[10px] text-[#667781]">{msg.time}</span>
                   {msg.isMe && <CheckCheck className="w-3 h-3 text-[#53bdeb]" />}
@@ -386,36 +476,18 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
                 : "This member is not LinkedIn verified. Messaging is not available."}
             </p>
           )}
-          <div className="flex items-center gap-2">
-            <Smile className="w-5 h-5 text-[#54656f] cursor-pointer opacity-50" />
-            <Paperclip className="w-5 h-5 text-[#54656f] cursor-pointer opacity-50" />
-            <div className="flex-1 bg-white rounded-lg px-3 py-1.5 border border-[#E0E0E0]">
-              <input
-                type="text"
-                placeholder={
-                  !canSendInChat
-                    ? "Messaging unavailable"
-                    : isRecipientPending
-                      ? "Click Accept to reply"
-                      : "Type a message"
-                }
-                disabled={!canSendInChat || isRecipientPending}
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && canSendInChat && handleSend()}
-                className="w-full text-[13px] bg-transparent focus:outline-none placeholder:text-[#94a3b8] disabled:opacity-50"
-              />
-            </div>
-            <Send
-              className={clsx(
-                "w-5 h-5 transition-colors",
-                messageInput.trim() && canSendInChat && !sendBusy
-                  ? "text-[#0A66C2] cursor-pointer"
-                  : "text-[#54656f] opacity-50"
-              )}
-              onClick={() => canSendInChat && handleSend()}
-            />
-          </div>
+          <ChatComposer
+            variant="compact"
+            value={messageInput}
+            onChange={setMessageInput}
+            onSend={handleSend}
+            onAttachImage={handleAttachImage}
+            beforeAttach={validateChatSend}
+            placeholder={composerPlaceholder}
+            disabled={!canSendInChat || isRecipientPending}
+            isSending={isFbSending}
+            isUploading={isUploadingImage}
+          />
         </div>
       )}
     </div>

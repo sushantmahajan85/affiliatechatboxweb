@@ -1,5 +1,5 @@
 "use client";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -17,23 +17,33 @@ import { useSaveEmailNotifPrefMutation } from "@/store/endpoints/members";
 
 type SettingsToggleProps = {
   enabled: boolean;
-  setEnabled: (v: boolean) => void;
+  setEnabled: (v: boolean) => void | Promise<void>;
+  loading?: boolean;
+  disabled?: boolean;
 };
 
-function SettingsToggle({ enabled, setEnabled }: SettingsToggleProps) {
+function SettingsToggle({ enabled, setEnabled, loading = false, disabled = false }: SettingsToggleProps) {
   return (
     <button
       type="button"
-      onClick={() => setEnabled(!enabled)}
-      className={`relative w-[48px] h-[24px] rounded-full transition-colors duration-200 outline-none ${
+      disabled={loading || disabled}
+      onClick={() => void setEnabled(!enabled)}
+      className={`relative w-[48px] h-[24px] rounded-full transition-colors duration-200 outline-none disabled:opacity-50 ${
         enabled ? "bg-[#1C3A4A]" : "bg-[#D1D1D1]"
       }`}
+      aria-busy={loading}
     >
-      <motion.div
-        animate={{ x: enabled ? 26 : 2 }}
-        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        className="absolute top-[2px] left-0 w-[20px] h-[20px] bg-white rounded-full shadow-sm"
-      />
+      {loading ? (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+        </span>
+      ) : (
+        <motion.div
+          animate={{ x: enabled ? 26 : 2 }}
+          transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          className="absolute top-[2px] left-0 w-[20px] h-[20px] bg-white rounded-full shadow-sm"
+        />
+      )}
     </button>
   );
 }
@@ -50,10 +60,13 @@ export function SettingsPage() {
     user?.isEmailNotifAllowed !== false
   );
   const [emailSaving, setEmailSaving] = useState(false);
+  const [pushSaving, setPushSaving] = useState(false);
   const [permLabel, setPermLabel] = useState<string | null>(null);
   const [saveEmailPref] = useSaveEmailNotifPrefMutation();
 
   const onPushMasterChange = useCallback(async (next: boolean) => {
+    if (pushSaving) return;
+
     if (next) {
       if (!browserNotificationsSupported()) {
         setPermLabel("This browser does not support notifications.");
@@ -74,22 +87,27 @@ export function SettingsPage() {
         setPermLabel("You must be logged in on this browser to register Firebase web push.");
         return;
       }
-      const saved = await syncWebFcmTokenToServer(uid, token);
-      if (!saved) {
-        setPermLabel(
-          "Notifications are allowed, but the web device token could not be saved. Deploy the API (webFcmToken field + /update_web_fcm_token) and try again."
-        );
+
+      setPushSaving(true);
+      setPermLabel(null);
+      const result = await syncWebFcmTokenToServer(uid, token);
+      setPushSaving(false);
+
+      if (!result.ok) {
+        setPermLabel(result.reason);
         return;
       }
+
       setDesktopPushMasterEnabled(true);
       setPushMaster(true);
-      setPermLabel(null);
+      setPermLabel("Web push enabled for this browser.");
       return;
     }
+
     setDesktopPushMasterEnabled(false);
     setPushMaster(false);
     setPermLabel(null);
-  }, [uid, token]);
+  }, [uid, token, pushSaving]);
 
   const onChatToggle = useCallback((next: boolean) => {
     setDesktopChatNotificationsEnabled(next);
@@ -111,7 +129,6 @@ export function SettingsPage() {
 
   return (
     <div className="sm:-m-8 p-6 flex flex-col font-sans">
-      {/* Header */}
       <div className="flex items-center gap-4 mb-8 pt-2">
         <button 
           type="button"
@@ -123,10 +140,7 @@ export function SettingsPage() {
         <h1 className="text-[24px] font-bold text-[#1A1A1A]">Notification Settings</h1>
       </div>
 
-      {/* Settings Card */}
       <div className="bg-white rounded-[16px] shadow-[0_4px_12px_rgba(0,0,0,0.04)] overflow-hidden">
-        
-        {/* Push Notifications Row */}
         <div className="flex items-center justify-between px-5 py-[22px]">
           <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Push Notifications</span>
@@ -134,20 +148,29 @@ export function SettingsPage() {
               Firebase web push (same FCM pipeline as the Android app): works in the background and when the tab is closed (if the browser allows).
             </span>
             {permLabel && (
-              <span className="text-[12px] text-amber-700 mt-1">{permLabel}</span>
+              <span
+                className={`text-[12px] mt-1 ${
+                  pushMaster ? "text-[#0A7EA4]" : "text-amber-700"
+                }`}
+              >
+                {permLabel}
+              </span>
             )}
           </div>
-          <SettingsToggle enabled={pushMaster} setEnabled={onPushMasterChange} />
+          <SettingsToggle
+            enabled={pushMaster}
+            setEnabled={onPushMasterChange}
+            loading={pushSaving}
+          />
         </div>
 
         <div className="h-1px bg-[#EEEEEE] mx-5" />
 
-        {/* Chat Notifications Row */}
         <div className="flex items-center justify-between px-5 py-[22px]">
           <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Chat Notifications</span>
             <span className="text-[13px] text-[#757575]">
-              Desktop alerts for new unread messages
+              Desktop alerts for new unread messages while this site is open
             </span>
           </div>
           <SettingsToggle enabled={chatEnabled} setEnabled={onChatToggle} />
@@ -155,7 +178,6 @@ export function SettingsPage() {
 
         <div className="h-1px bg-[#EEEEEE] mx-5" />
 
-        {/* Email Notifications Row */}
         <div className="flex items-center justify-between px-5 py-[22px]">
           <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Email Notifications</span>
@@ -166,7 +188,7 @@ export function SettingsPage() {
               <span className="text-[12px] text-[#0A7EA4] mt-1">Saving…</span>
             )}
           </div>
-          <SettingsToggle enabled={emailEnabled} setEnabled={onEmailToggle} />
+          <SettingsToggle enabled={emailEnabled} setEnabled={onEmailToggle} loading={emailSaving} />
         </div>
 
         <div className="h-[1px] bg-[#EEEEEE] mx-5" />
@@ -179,10 +201,8 @@ export function SettingsPage() {
           <span className="text-[16px] font-bold text-[#1A1A1A]">View in-app notifications</span>
           <ChevronRight className="w-5 h-5 text-[#B0B0B0]" />
         </button>
-
       </div>
 
-      {/* Additional Android-style space at bottom */}
       <div className="mt-auto py-8 text-center">
         <p className="text-[12px] text-[#A0A0A0] uppercase tracking-wider font-medium">Notification Preferences v1.0</p>
       </div>

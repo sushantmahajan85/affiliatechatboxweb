@@ -38,10 +38,10 @@ export function DesktopNotificationBridge() {
     let unsub: (() => void) | undefined;
 
     void (async () => {
-      const ok = await syncWebFcmTokenToServer(currentUserId, token);
+      const result = await syncWebFcmTokenToServer(currentUserId, token);
       if (!alive) return;
-      if (!ok) {
-        console.warn("[fcm] Web push token was not saved; check API and VAPID key.");
+      if (!result.ok) {
+        console.warn("[fcm] Web push token was not saved:", result.reason);
       }
       const off = await subscribeForegroundFcm((title, body, url, tag) => {
         if (!alive || Notification.permission !== "granted") return;

@@ -93,7 +93,7 @@ function FirebaseChatSidebarRow(props: {
 export function ChatsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { userId: authUserId, user: authUser } = useAppSelector((state) => state.auth);
+  const { userId: authUserId, user: authUser, token } = useAppSelector((state) => state.auth);
   const currentUserId = authUserId || authUser?._id || undefined;
   const isAdminChatUser = authUser?.role === "admin";
 
@@ -503,6 +503,7 @@ export function ChatsPage() {
           message: payload.message,
           messageType: payload.messageType,
           imageUrl: payload.imageUrl,
+          authToken: token ?? undefined,
         });
       } else {
         await sendFirestoreChatMessage(db, {
@@ -511,6 +512,7 @@ export function ChatsPage() {
           message: payload.message,
           messageType: payload.messageType,
           imageUrl: payload.imageUrl,
+          authToken: token ?? undefined,
         });
       }
       return true;

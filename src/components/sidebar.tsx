@@ -216,6 +216,57 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         <div className="mt-auto border-t border-[#E0E0E0]">
+          {!isCollapsed ? (
+            <div className="px-4 pt-3 pb-1 flex flex-col gap-1">
+              <Link
+                href="/privacy-policy"
+                onClick={() => {
+                  if (window.innerWidth < 768) onClose?.();
+                }}
+                className={clsx(
+                  "text-[12px] text-[#757575] hover:text-[#0A7EA4] transition-colors py-1",
+                  pathname === "/privacy-policy" && "text-[#0A7EA4] font-semibold"
+                )}
+              >
+                Privacy Policy
+              </Link>
+              <Link
+                href="/terms-of-service"
+                onClick={() => {
+                  if (window.innerWidth < 768) onClose?.();
+                }}
+                className={clsx(
+                  "text-[12px] text-[#757575] hover:text-[#0A7EA4] transition-colors py-1",
+                  pathname === "/terms-of-service" && "text-[#0A7EA4] font-semibold"
+                )}
+              >
+                Terms of Service
+              </Link>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1 py-2">
+              <Link
+                href="/privacy-policy"
+                title="Privacy Policy"
+                className={clsx(
+                  "p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-lg transition-colors text-[10px] font-bold",
+                  pathname === "/privacy-policy" && "text-[#0A7EA4]"
+                )}
+              >
+                PP
+              </Link>
+              <Link
+                href="/terms-of-service"
+                title="Terms of Service"
+                className={clsx(
+                  "p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-lg transition-colors text-[10px] font-bold",
+                  pathname === "/terms-of-service" && "text-[#0A7EA4]"
+                )}
+              >
+                ToS
+              </Link>
+            </div>
+          )}
           <button
             onClick={handleLogout}
             className={clsx(

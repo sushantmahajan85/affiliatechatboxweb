@@ -1,17 +1,11 @@
 "use client";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
-  MoreVertical,
-  Send,
-  Paperclip,
-  Smile,
   CheckCheck,
-  Phone,
-  Video,
   ShieldCheck,
-  Info,
   Loader2,
 } from "lucide-react";
+import { ChatComposer } from "@/components/chat-composer";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { clsx } from "clsx";
 import { motion } from "motion/react";
@@ -40,8 +34,8 @@ function dateBannerLabel(ms: number): string {
 }
 
 export function AdminPage() {
-  const { userId: authUserId, user: authUser } = useAppSelector((s) => s.auth);
-  const currentUserId = authUserId || authUser?._id || null;
+  const { userId: authUserId, user: authUser, token } = useAppSelector((s) => s.auth);
+  const currentUserId = authUserId || authUser?._id || undefined;
 
   const adminId = FIRESTORE_ADMIN_SUPPORT_USER_ID;
   const { data: adminProfile, isLoading: adminProfileLoading } = useGetProfileQuery(adminId, {
@@ -65,7 +59,6 @@ export function AdminPage() {
   const [isSending, setIsSending] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const chatRoomId =
     currentUserId != null ? buildChatRoomId(currentUserId, adminId) : null;
@@ -107,58 +100,68 @@ export function AdminPage() {
     return first ? dateBannerLabel(first) : "";
   }, [messages]);
 
+  const validateSend = useCallback((): boolean => {
+    if (!currentUserId) return false;
+    if (!isFirebaseConfigured()) {
+      toast.error("Firebase chat is not configured");
+      return false;
+    }
+    const db = getFirestoreDb();
+    if (!db || !chatRoomId) {
+      toast.error("Firebase is not ready");
+      return false;
+    }
+    return true;
+  }, [currentUserId, chatRoomId]);
+
+  const sendAdminPayload = useCallback(
+    async (payload: {
+      message: string;
+      messageType: "text" | "image";
+      imageUrl?: string | null;
+    }): Promise<boolean> => {
+      if (!currentUserId || !validateSend()) return false;
+      const db = getFirestoreDb();
+      if (!db) return false;
+      try {
+        await sendFirestoreAdminMessage(db, {
+          currentUserId,
+          adminReceiverId: adminId,
+          message: payload.message,
+          messageType: payload.messageType,
+          imageUrl: payload.imageUrl,
+          authToken: token ?? undefined,
+        });
+        return true;
+      } catch (err) {
+        console.error(err);
+        toast.error(payload.messageType === "image" ? "Failed to send image" : "Failed to send message");
+        return false;
+      }
+    },
+    [currentUserId, validateSend, adminId, token]
+  );
+
   const handleSendMessage = async () => {
     const text = messageInput.trim();
-    if (!text || !currentUserId) return;
-    if (!isFirebaseConfigured()) {
-      toast.error("Firebase chat is not configured");
-      return;
-    }
-    const db = getFirestoreDb();
-    if (!db) {
-      toast.error("Firebase is not ready");
-      return;
-    }
+    if (!text || !validateSend()) return;
+
     setMessageInput("");
     setIsSending(true);
-    try {
-      await sendFirestoreAdminMessage(db, {
-        currentUserId,
-        adminReceiverId: adminId,
-        message: text,
-        messageType: "text",
-      });
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to send message");
-      setMessageInput(text);
-    } finally {
-      setIsSending(false);
-    }
+    const ok = await sendAdminPayload({ message: text, messageType: "text" });
+    if (!ok) setMessageInput(text);
+    setIsSending(false);
   };
 
-  const handlePickImage = () => fileInputRef.current?.click();
+  const handleAttachImage = async (file: File, caption: string): Promise<boolean> => {
+    if (!validateSend() || !currentUserId || !chatRoomId) return false;
 
-  const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file || !currentUserId) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file");
-      return;
-    }
-    if (!isFirebaseConfigured()) {
-      toast.error("Firebase chat is not configured");
-      return;
-    }
-    const db = getFirestoreDb();
     const storage = getFirebaseStorage();
-    if (!db || !storage || !chatRoomId) {
+    if (!storage) {
       toast.error("Firebase is not ready");
-      return;
+      return false;
     }
-    const caption = messageInput.trim();
-    setMessageInput("");
+
     setIsUploading(true);
     try {
       const buf = new Uint8Array(await file.arrayBuffer());
@@ -168,9 +171,7 @@ export function AdminPage() {
         data: buf,
         contentType: file.type || "image/jpeg",
       });
-      await sendFirestoreAdminMessage(db, {
-        currentUserId,
-        adminReceiverId: adminId,
+      return await sendAdminPayload({
         message: caption,
         messageType: "image",
         imageUrl,
@@ -178,7 +179,7 @@ export function AdminPage() {
     } catch (err) {
       console.error(err);
       toast.error("Failed to send image");
-      if (caption) setMessageInput(caption);
+      return false;
     } finally {
       setIsUploading(false);
     }
@@ -206,14 +207,6 @@ export function AdminPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-180px)] min-h-[500px] bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] overflow-hidden border border-[#F3F4F6]">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={onFileSelected}
-      />
-
       <div className="h-[72px] bg-white border-b border-[#F3F4F6] flex items-center justify-between px-6 z-10 shrink-0">
         <div className="flex items-center gap-4 min-w-0">
           <div className="relative shrink-0">
@@ -327,49 +320,17 @@ export function AdminPage() {
         </div>
       </div>
 
-      <div className="bg-[#F0F2F5] px-4 py-3 flex items-center gap-3 shrink-0">
-        <button type="button" className="text-[#54656f] hover:text-[#111b21] transition-colors p-1.5" aria-label="Emoji">
-          <Smile className="w-6 h-6" />
-        </button>
-        <button
-          type="button"
-          onClick={handlePickImage}
-          disabled={isUploading || isSending}
-          className="text-[#54656f] hover:text-[#111b21] transition-colors p-1.5 disabled:opacity-40"
-          aria-label="Attach image"
-        >
-          {isUploading ? <Loader2 className="w-6 h-6 animate-spin" /> : <Paperclip className="w-6 h-6" />}
-        </button>
-        <div className="flex-1">
-          <input
-            type="text"
-            placeholder="Write a message…"
-            value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void handleSendMessage();
-              }
-            }}
-            disabled={isSending || isUploading}
-            className="w-full h-11 bg-white border-none rounded-xl px-5 text-[15px] focus:outline-none placeholder:text-[#94a3b8] shadow-sm disabled:opacity-60"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => void handleSendMessage()}
-          disabled={!messageInput.trim() || isSending || isUploading}
-          className={clsx(
-            "w-11 h-11 flex items-center justify-center rounded-full transition-all shadow-sm active:scale-95",
-            messageInput.trim() && !isSending && !isUploading
-              ? "bg-[#0A7EA4] text-white"
-              : "bg-[#E0E0E0] text-[#9E9E9E] cursor-not-allowed"
-          )}
-          aria-label="Send"
-        >
-          {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 ml-0.5" />}
-        </button>
+      <div className="bg-[#F0F2F5] px-4 py-3 shrink-0 border-t border-[#E0E0E0]">
+        <ChatComposer
+          value={messageInput}
+          onChange={setMessageInput}
+          onSend={handleSendMessage}
+          onAttachImage={handleAttachImage}
+          beforeAttach={validateSend}
+          placeholder="Write a message…"
+          isSending={isSending}
+          isUploading={isUploading}
+        />
       </div>
     </div>
   );
