@@ -10,7 +10,7 @@ import { useAppDispatch } from "@/store/hooks";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import bgImage from "../../../public/assets/authBG.jpg";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -101,15 +101,6 @@ export function AuthPage() {
       inputRefs.current[index - 1]?.focus();
     }
   };
-
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-  const linkedinCode = searchParams?.get("code");
-
-  useEffect(() => {
-    if (linkedinCode) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [linkedinCode, dispatch, router]);
 
   return (
     <div className="min-h-screen relative flex overflow-hidden">
