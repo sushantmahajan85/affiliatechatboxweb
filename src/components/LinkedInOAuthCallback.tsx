@@ -16,6 +16,20 @@ export function LinkedInOAuthCallback() {
     if (typeof window === "undefined" || handled.current) return;
 
     const params = new URLSearchParams(window.location.search);
+    const linkedinError = params.get("linkedin_error");
+    const linkedinErrorDescription = params.get("linkedin_error_description");
+
+    if (linkedinError) {
+      handled.current = true;
+      toast.error(
+        linkedinErrorDescription ||
+          "LinkedIn sign-in could not complete. Try again after removing the app under LinkedIn Settings → Permitted services.",
+        { duration: 12000 }
+      );
+      router.replace(window.location.pathname || "/");
+      return;
+    }
+
     const linkedinSuccess = params.get("linkedin_success");
     const token = params.get("token");
     const userId = params.get("userId");
@@ -35,12 +49,11 @@ export function LinkedInOAuthCallback() {
           dispatch(setCredentials({ user: data.user, token }));
           const savedUrl = data.user.LinkedIn || linkedInUrlFromRedirect;
           if (savedUrl) {
-            toast.success("LinkedIn connected. Your profile link is saved.");
+            toast.success("LinkedIn connected.");
           } else {
-            toast.success("LinkedIn verified.");
-            toast.message(
-              "Profile URL was not returned by LinkedIn. Add your LinkedIn URL on your profile, or ask admin to enable r_basicprofile on the server.",
-              { duration: 8000 }
+            toast.error(
+              "LinkedIn signed you in but your profile link was not saved. Sign in with LinkedIn again after revoking the app in LinkedIn settings.",
+              { duration: 10000 }
             );
           }
         } else {
@@ -50,8 +63,7 @@ export function LinkedInOAuthCallback() {
         console.error("LinkedIn OAuth callback sync failed:", e);
         toast.error("Failed to sync LinkedIn account.");
       } finally {
-        const path = window.location.pathname || "/";
-        router.replace(path);
+        router.replace(window.location.pathname || "/");
       }
     };
 
