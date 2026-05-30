@@ -94,7 +94,7 @@ export function ChatsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { userId: authUserId, user: authUser } = useAppSelector((state) => state.auth);
-  const currentUserId = authUserId || authUser?._id || null;
+  const currentUserId = authUserId || authUser?._id || undefined;
   const isAdminChatUser = authUser?.role === "admin";
 
   const [activeTab, setActiveTab] = useState<"messages" | "requests">("messages");
