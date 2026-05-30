@@ -5,9 +5,22 @@ import { useRouter } from "next/navigation";
 import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { toast } from "sonner";
 
-export function LinkedInOAuthCallback() {
+const LINKEDIN_CALLBACK_PATH = "/auth/linkedin/callback";
+
+type LinkedInOAuthCallbackProps = {
+  /** Where to send the user after credentials are stored (default: home). */
+  redirectTo?: string;
+};
+
+function stripUrlToPath(path: string) {
+  if (typeof window === "undefined") return;
+  window.history.replaceState(null, "", path);
+}
+
+export function LinkedInOAuthCallback({
+  redirectTo = "/",
+}: LinkedInOAuthCallbackProps = {}) {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const handled = useRef(false);
@@ -17,27 +30,25 @@ export function LinkedInOAuthCallback() {
 
     const params = new URLSearchParams(window.location.search);
     const linkedinError = params.get("linkedin_error");
-    const linkedinErrorDescription = params.get("linkedin_error_description");
-
-    if (linkedinError) {
-      handled.current = true;
-      toast.error(
-        linkedinErrorDescription ||
-          "LinkedIn sign-in could not complete. Try again after removing the app under LinkedIn Settings → Permitted services.",
-        { duration: 12000 }
-      );
-      router.replace(window.location.pathname || "/");
-      return;
-    }
-
     const linkedinSuccess = params.get("linkedin_success");
     const token = params.get("token");
     const userId = params.get("userId");
-    const linkedInUrlFromRedirect = params.get("linkedInUrl");
 
-    if (linkedinSuccess !== "true" || !token || !userId) return;
+    const isCallback =
+      linkedinError ||
+      (linkedinSuccess === "true" && token && userId);
+
+    if (!isCallback) return;
 
     handled.current = true;
+
+    // Remove token and PII from the address bar immediately (before async work).
+    stripUrlToPath(window.location.pathname || LINKEDIN_CALLBACK_PATH);
+
+    if (linkedinError) {
+      router.replace(redirectTo);
+      return;
+    }
 
     const finish = async () => {
       try {
@@ -46,29 +57,17 @@ export function LinkedInOAuthCallback() {
         });
         const data = await res.json();
         if (data?.user) {
-          dispatch(setCredentials({ user: data.user, token }));
-          const savedUrl = data.user.LinkedIn || linkedInUrlFromRedirect;
-          if (savedUrl) {
-            toast.success("LinkedIn connected.");
-          } else {
-            toast.error(
-              "LinkedIn signed you in but your profile link was not saved. Sign in with LinkedIn again after revoking the app in LinkedIn settings.",
-              { duration: 10000 }
-            );
-          }
-        } else {
-          toast.error("Could not load your account after LinkedIn sign-in.");
+          dispatch(setCredentials({ user: data.user, token: token! }));
         }
       } catch (e) {
         console.error("LinkedIn OAuth callback sync failed:", e);
-        toast.error("Failed to sync LinkedIn account.");
       } finally {
-        router.replace(window.location.pathname || "/");
+        router.replace(redirectTo);
       }
     };
 
     finish();
-  }, [dispatch, router]);
+  }, [dispatch, router, redirectTo]);
 
   return null;
 }
