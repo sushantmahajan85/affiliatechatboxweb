@@ -1,5 +1,6 @@
 "use client";
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
 import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
@@ -19,6 +20,9 @@ export function ConnectionRequestModal() {
   const [message, setMessage] = useState("Hi, I'd like to connect with you!");
   const [fbSending, setFbSending] = useState(false);
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
 
   const { data: targetProfile, isSuccess: targetReady } = useGetProfileQuery(connectionTargetId ?? "", {
     skip: !isConnectionModalOpen || !connectionTargetId,
@@ -34,15 +38,29 @@ export function ConnectionRequestModal() {
       return;
     }
 
-    if (user.isLinkedinVerified && user.role !== "admin") {
-      if (!targetReady) {
+    if (isSelfChatPartner(user._id, connectionTargetId ?? undefined)) {
+      toast.error("You cannot chat with yourself");
+      return;
+    }
+
+    const blockReason = getLinkedinChatBlockReason(
+      user.isLinkedinVerified,
+      targetProfile?.user?.isLinkedinVerified,
+      user.role === "admin",
+      targetProfile?.user?.role === "admin"
+    );
+    if (blockReason) {
+      if (blockReason === "recipient_not_verified" && !targetReady) {
         toast.error("Please wait a moment and try again.");
         return;
       }
-      if (!targetProfile?.user?.isLinkedinVerified) {
-        setLinkedinGuardOpen(true);
-        return;
-      }
+      setLinkedinGuardReason(blockReason);
+      setLinkedinGuardOpen(true);
+      return;
+    }
+    if (!targetReady) {
+      toast.error("Please wait a moment and try again.");
+      return;
     }
 
     const senderId = user._id;
@@ -130,7 +148,11 @@ export function ConnectionRequestModal() {
           </div>
         </div>
       ) : null}
-      <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+      <LinkedinChatGuardDialog
+        open={linkedinGuardOpen}
+        onOpenChange={setLinkedinGuardOpen}
+        reason={linkedinGuardReason}
+      />
     </>
   );
 }

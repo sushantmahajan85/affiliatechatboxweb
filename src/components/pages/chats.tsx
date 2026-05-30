@@ -1,13 +1,17 @@
 "use client";
-import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { ChatComposer } from "@/components/chat-composer";
+import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useFirebaseChatModule } from "@/hooks/useFirebaseChatModule";
 import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
-import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
+import { getFirebaseStorage, getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
 import {
-  filterInboxFirestoreRooms,
+  buildChatRoomId,
   isAdminSupportChatPartner,
+  sendFirestoreAdminMessage,
   sendFirestoreChatMessage,
+  uploadFirestoreChatImage,
 } from "@/lib/firebase-chat";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
@@ -21,10 +25,7 @@ import {
   CheckCheck,
   MoreVertical,
   Phone,
-  Plus,
   Search,
-  Send,
-  Smile,
   User,
   Video
 } from "lucide-react";
@@ -102,16 +103,20 @@ export function ChatsPage() {
   const [messageInput, setMessageInput] = useState("");
   const [lastNotifId, setLastNotifId] = useState<string | null>(null);
   const [isFbSending, setIsFbSending] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
+    "sender_not_verified" | "recipient_not_verified" | null
+  >(null);
 
   const useFirestore = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, selectedChatId);
 
-  const inboxFbRooms = useMemo(
-    () => (useFirestore && fbChat.active ? filterInboxFirestoreRooms(fbChat.rooms) : []),
-    [useFirestore, fbChat.active, fbChat.rooms]
-  );
+  const inboxFbRooms = useMemo(() => {
+    if (!useFirestore || !fbChat.active) return [];
+    return fbChat.rooms.filter((r) => !isSelfChatPartner(currentUserId, r.partnerId));
+  }, [useFirestore, fbChat.active, fbChat.rooms, currentUserId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [markAsRead] = useMarkChatAsReadMutation();
@@ -133,7 +138,7 @@ export function ChatsPage() {
   // (The user might not be in our conversation list yet)
   const isRealMongoId = typeof selectedChatId === "string" && selectedChatId.length > 10;
   const inRestConv = !!convData?.conversations?.find(
-    (c) => String(c.id) === String(selectedChatId) && !isAdminSupportChatPartner(String(c.id))
+    (c) => String(c.id) === String(selectedChatId)
   );
   const { data: profileData } = useGetProfileQuery(selectedChatId as string, {
     skip: !isRealMongoId || inRestConv,
@@ -143,31 +148,33 @@ export function ChatsPage() {
     selectedChatId && String(selectedChatId).length > 10 ? String(selectedChatId) : "";
   const { data: partnerLinkedinGuard, isSuccess: partnerLinkedinGuardReady } = useGetProfileQuery(
     guardPartnerMongoId,
-    { skip: !guardPartnerMongoId || !authUser?.isLinkedinVerified || isAdminChatUser },
+    { skip: !guardPartnerMongoId || isAdminChatUser },
   );
 
   // Handle incoming userId from navigation
   useEffect(() => {
     const userId = searchParams?.get("userId");
-    if (userId) {
-      // Don't parseInt if it looks like a Mongo ID
-      const id = userId.length > 10 ? userId : parseInt(userId);
-      if (isAdminSupportChatPartner(String(id))) {
-        setSelectedChatId(null);
-        return;
-      }
-      setSelectedChatId(id);
+    if (!userId || !currentUserId) return;
+    const id = userId.length > 10 ? userId : String(parseInt(userId, 10));
+    if (isSelfChatPartner(currentUserId, id)) {
+      toast.error("You cannot chat with yourself");
+      setSelectedChatId(null);
+      router.replace("/chats");
+      return;
     }
-  }, [searchParams]);
+    setSelectedChatId(id);
+  }, [searchParams, currentUserId, router]);
 
   useEffect(() => {
     if (isAdminChatUser) return;
     if (!authUser?.isLinkedinVerified || !guardPartnerMongoId) return;
     if (!partnerLinkedinGuardReady) return;
     const pu = partnerLinkedinGuard?.user;
-    if (!pu || isAdminSupportChatPartner(guardPartnerMongoId)) return;
-    if (String(pu._id) !== guardPartnerMongoId) return;
-    if (!pu.isLinkedinVerified) {
+    if (!pu || String(pu._id) !== guardPartnerMongoId) return;
+    if (isSelfChatPartner(currentUserId, guardPartnerMongoId)) return;
+    const recipientIsAdmin = pu.role === "admin";
+    if (!pu.isLinkedinVerified && !recipientIsAdmin) {
+      setLinkedinGuardReason("recipient_not_verified");
       setLinkedinGuardOpen(true);
       setSelectedChatId(null);
       router.replace("/chats");
@@ -184,7 +191,7 @@ export function ChatsPage() {
   // Combined data to handle chats not in the mock list
   const selectedChat = useMemo(() => {
     if (!selectedChatId) return null;
-    if (isAdminSupportChatPartner(String(selectedChatId))) return null;
+    if (isSelfChatPartner(currentUserId, String(selectedChatId))) return null;
 
     if (useFirestore && fbChat.active) {
       const row = inboxFbRooms.find((r) => r.partnerId === String(selectedChatId));
@@ -321,7 +328,7 @@ export function ChatsPage() {
     
     // Map existing conversations and check for unread notifications for each
     return convData.conversations
-      .filter((c) => !isAdminSupportChatPartner(String(c.id)))
+      .filter((c) => !isSelfChatPartner(currentUserId, String(c.id)))
       .map((c) => {
         const unreadNotifs = notificationsData?.notifs?.filter(n => 
             n.senderId === c.id && n.type === "chat_request" && !n.isRead
@@ -419,77 +426,144 @@ export function ChatsPage() {
         text: m.text,
         sender: m.sender,
         time: m.timeLabel,
+        messageType: m.messageType,
+        imageUrl: m.imageUrl,
       }));
     }
     if (!historyData?.history) return [];
-    
-    return historyData.history.map(m => ({
+
+    return historyData.history.map((m) => ({
       id: m._id,
       text: m.message,
       sender: String(m.senderId) === String(currentUserId) ? "me" : "them",
-      time: format(new Date(m.timestamp), "p")
+      time: format(new Date(m.timestamp), "p"),
+      messageType: "text" as const,
+      imageUrl: null as string | null,
     }));
   }, [useFirestore, fbChat.active, fbChat.messages, selectedChatId, historyData, currentUserId]);
 
-  const handleSendMessage = async () => {
-    if (!messageInput.trim() || !selectedChatId || !currentUserId) return;
+  const validateChatSend = (): boolean => {
+    if (!selectedChatId || !currentUserId) return false;
 
-    if (isAdminSupportChatPartner(String(selectedChatId))) {
-      toast.error("Use Contact Admin for support messages");
-      return;
+    if (isSelfChatPartner(currentUserId, String(selectedChatId))) {
+      toast.error("You cannot chat with yourself");
+      return false;
     }
 
-    // Prevent sending message to self
-    if (String(selectedChatId) === String(currentUserId)) {
-      toast.error("You cannot send a message to yourself");
-      return;
-    }
-
-    if (authUser?.isLinkedinVerified && !isAdminChatUser) {
-      if (!partnerLinkedinGuardReady || !partnerLinkedinGuard?.user) {
-        toast.error("Please wait a moment.");
-        return;
-      }
-      if (String(partnerLinkedinGuard.user._id) !== String(selectedChatId)) {
-        toast.error("Please wait a moment.");
-        return;
-      }
-      if (!partnerLinkedinGuard.user.isLinkedinVerified) {
-        setLinkedinGuardOpen(true);
-        return;
-      }
-    }
-
-    const messageText = messageInput.trim();
-    setMessageInput("");
-
-    if (isFirebaseConfigured() && currentUserId) {
-      const db = getFirestoreDb();
-      if (!db) {
-        toast.error("Firebase is not ready");
-        return;
-      }
-      setIsFbSending(true);
-      try {
-        if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
-          await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+    const partnerUser = partnerLinkedinGuard?.user;
+    const recipientIsAdmin = partnerUser?.role === "admin";
+    const blockReason = getLinkedinChatBlockReason(
+      authUser?.isLinkedinVerified,
+      partnerUser?.isLinkedinVerified,
+      isAdminChatUser,
+      recipientIsAdmin
+    );
+    if (blockReason) {
+      if (blockReason === "recipient_not_verified") {
+        if (!partnerLinkedinGuardReady || !partnerLinkedinGuard?.user) {
+          toast.error("Please wait a moment.");
+          return false;
         }
+        if (String(partnerLinkedinGuard.user._id) !== String(selectedChatId)) {
+          toast.error("Please wait a moment.");
+          return false;
+        }
+      }
+      setLinkedinGuardReason(blockReason);
+      setLinkedinGuardOpen(true);
+      return false;
+    }
+
+    return true;
+  };
+
+  const sendChatPayload = async (payload: {
+    message: string;
+    messageType: "text" | "image";
+    imageUrl?: string | null;
+  }): Promise<boolean> => {
+    if (!selectedChatId || !currentUserId) return false;
+    if (!isFirebaseConfigured()) {
+      toast.error("Firebase chat is not configured");
+      return false;
+    }
+    const db = getFirestoreDb();
+    if (!db) {
+      toast.error("Firebase is not ready");
+      return false;
+    }
+    try {
+      if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
+        await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
+      }
+      if (isAdminSupportChatPartner(String(selectedChatId))) {
+        await sendFirestoreAdminMessage(db, {
+          currentUserId,
+          adminReceiverId: String(selectedChatId),
+          message: payload.message,
+          messageType: payload.messageType,
+          imageUrl: payload.imageUrl,
+        });
+      } else {
         await sendFirestoreChatMessage(db, {
           currentUserId,
           receiverId: String(selectedChatId),
-          message: messageText,
-          messageType: "text",
+          message: payload.message,
+          messageType: payload.messageType,
+          imageUrl: payload.imageUrl,
         });
-      } catch (err) {
-        console.error("Failed to send Firestore message:", err);
-        toast.error("Failed to send message");
-      } finally {
-        setIsFbSending(false);
       }
-      return;
+      return true;
+    } catch (err) {
+      console.error("Failed to send Firestore message:", err);
+      toast.error(payload.messageType === "image" ? "Failed to send image" : "Failed to send message");
+      return false;
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!messageInput.trim() || !validateChatSend()) return;
+
+    const messageText = messageInput.trim();
+    setMessageInput("");
+    setIsFbSending(true);
+    const ok = await sendChatPayload({ message: messageText, messageType: "text" });
+    if (!ok) setMessageInput(messageText);
+    setIsFbSending(false);
+  };
+
+  const handleAttachImage = async (file: File, caption: string): Promise<boolean> => {
+    if (!validateChatSend()) return false;
+    if (!currentUserId || !selectedChatId) return false;
+
+    const storage = getFirebaseStorage();
+    const chatRoomId = buildChatRoomId(currentUserId, String(selectedChatId));
+    if (!storage) {
+      toast.error("Firebase is not ready");
+      return false;
     }
 
-    toast.error("Firebase chat is not configured");
+    setIsUploadingImage(true);
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const imageUrl = await uploadFirestoreChatImage(storage, {
+        userId: currentUserId,
+        chatRoomId,
+        data: buf,
+        contentType: file.type || "image/jpeg",
+      });
+      return await sendChatPayload({
+        message: caption,
+        messageType: "image",
+        imageUrl,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to send image");
+      return false;
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   useEffect(() => {
@@ -795,7 +869,23 @@ export function ChatsPage() {
                         ? "bg-[#D9FDD3] text-[#111b21] rounded-tr-none" 
                         : "bg-white text-[#111b21] rounded-tl-none"
                     )}>
-                      <p className="text-[14px] leading-tight pb-2">{msg.text}</p>
+                      {msg.messageType === "image" && msg.imageUrl ? (
+                        <a
+                          href={msg.imageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block mb-2"
+                        >
+                          <ImageWithFallback
+                            src={msg.imageUrl}
+                            alt=""
+                            className="max-w-full rounded-lg max-h-[240px] object-cover"
+                          />
+                        </a>
+                      ) : null}
+                      {msg.text ? (
+                        <p className="text-[14px] leading-tight pb-2 whitespace-pre-wrap">{msg.text}</p>
+                      ) : null}
                       <div className="flex items-center justify-end gap-1 -mt-1">
                         <span className="text-[11px] text-[#667781]">{msg.time}</span>
                         {msg.sender === "me" && (
@@ -818,34 +908,16 @@ export function ChatsPage() {
                     </p>
                   </div>
               ) : (
-                <div className="flex items-center gap-2 md:gap-4 max-w-4xl mx-auto bg-[#F5F7FB] p-2 rounded-2xl border border-[#E0E0E0]">
-                    <button className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all"><Plus className="w-5 h-5" /></button>
-                    <input
-                    type="text"
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                    placeholder="Type a message..."
-                    className="flex-1 bg-transparent border-none focus:outline-none text-[15px] placeholder:text-[#9E9E9E] px-2"
-                    />
-                    <div className="flex items-center gap-1 pr-1">
-                    <button className="p-2 text-[#757575] hover:bg-white rounded-xl transition-all"><Smile className="w-5 h-5" /></button>
-                    <button 
-                        onClick={handleSendMessage}
-                        disabled={isFbSending || !messageInput.trim()}
-                        className={clsx(
-                        "p-2.5 rounded-xl transition-all shadow-sm active:scale-95",
-                        messageInput.trim() ? "bg-[#0A7EA4] text-white" : "bg-gray-200 text-gray-400"
-                        )}
-                    >
-                        {isFbSending ? (
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                            <Send className="w-5 h-5" />
-                        )}
-                    </button>
-                    </div>
-                </div>
+                <ChatComposer
+                  value={messageInput}
+                  onChange={setMessageInput}
+                  onSend={handleSendMessage}
+                  onAttachImage={handleAttachImage}
+                  beforeAttach={validateChatSend}
+                  isSending={isFbSending}
+                  isUploading={isUploadingImage}
+                  disabled={isSenderPending}
+                />
               )}
             </div>
           </>
@@ -862,7 +934,11 @@ export function ChatsPage() {
         )}
       </div>
     </div>
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+    <LinkedinChatGuardDialog
+      open={linkedinGuardOpen}
+      onOpenChange={setLinkedinGuardOpen}
+      reason={linkedinGuardReason}
+    />
     </>
   );
 }

@@ -170,7 +170,13 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
 
           <div className="relative" ref={messageRef}>
             <button 
-              onClick={() => router.push('/chats')}
+              onClick={() => {
+                if (!isAuthenticated) {
+                  dispatch(openAuthModal());
+                  return;
+                }
+                router.push("/chats");
+              }}
               className="relative p-1.5 rounded-full transition-all duration-200 text-[#757575] hover:bg-[#F5F5F5]"
             >
               <MessageSquare className="w-5 h-5" />
