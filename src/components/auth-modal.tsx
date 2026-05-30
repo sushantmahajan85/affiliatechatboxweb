@@ -93,35 +93,7 @@ export function AuthModal() {
     window.location.href = `${getApiBaseUrl()}/auth/linkedin?t=${Date.now()}`;
   };
 
-  useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const code = searchParams.get("code");
-    const linkedinSuccess = searchParams.get("linkedin_success");
-    const token = searchParams.get("token");
-    const userId = searchParams.get("userId");
-    
-    if (linkedinSuccess === "true" && token && userId) {
-      const finishLinkedinSync = async () => {
-        try {
-          // Fetch the latest user data to confirm everything is synced
-          const userInfoRes = await fetch(`${getApiBaseUrl()}/api/users/${userId}/get_user`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const userRes = await userInfoRes.json();
-          
-          if (userRes.user) {
-            dispatch(setCredentials({ user: userRes.user, token: token }));
-            dispatch(closeAuthModal());
-            // Clear URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        } catch (err) {
-          setError("Failed to sync LinkedIn profile");
-        }
-      };
-      finishLinkedinSync();
-    }
-  }, [isAuthModalOpen]);
+  // LinkedIn return (?linkedin_success=) is handled globally by LinkedInOAuthCallback in Providers.
 
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1) return;

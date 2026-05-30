@@ -377,12 +377,16 @@ export function ProfilePage({ id }: { id?: string }) {
       formData.append("bio", editValues.bio);
       formData.append("location", editValues.location);
       formData.append("email", editValues.email);
-      
-      formData.append("LinkedIn", editValues.linkedin);
-      formData.append("Instagram", editValues.instagram);
-      formData.append("Telegram", editValues.telegram);
-      formData.append("Facebook", editValues.facebook);
-      formData.append("Skype", editValues.skype);
+
+      const appendIfSet = (key: string, value: string) => {
+        const v = (value || "").trim();
+        if (v) formData.append(key, v);
+      };
+      appendIfSet("LinkedIn", editValues.linkedin);
+      appendIfSet("Instagram", editValues.instagram);
+      appendIfSet("Telegram", editValues.telegram);
+      appendIfSet("Facebook", editValues.facebook);
+      appendIfSet("Skype", editValues.skype);
       formData.append("Company", editValues.company);
       formData.append("Designation", editValues.designation);
 
