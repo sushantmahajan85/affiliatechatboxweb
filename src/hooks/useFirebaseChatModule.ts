@@ -13,6 +13,7 @@ import {
   type FirestoreMessageRow,
 } from "@/lib/firebase-chat";
 import { useEffect, useMemo, useState } from "react";
+import { useAppSelector } from "@/store/hooks";
 
 export interface FirebaseChatModuleState {
   active: boolean;
@@ -32,6 +33,7 @@ export function useFirebaseChatModule(
   currentUserId: string | undefined,
   selectedPartnerId: string | number | null
 ): FirebaseChatModuleState {
+  const token = useAppSelector((s) => s.auth.token);
   const listCtx = useFirebaseChatRoomsContext();
   const active = listCtx.active && Boolean(currentUserId);
   const db = active ? getFirestoreDb() : null;
@@ -95,9 +97,10 @@ export function useFirebaseChatModule(
         receiverId,
         message: text,
         messageType: "text",
+        authToken: token ?? undefined,
       });
     };
-  }, [db, currentUserId]);
+  }, [db, currentUserId, token]);
 
   const acceptFirestoreInvite = useMemo(() => {
     return async (chatRoomId: string) => {

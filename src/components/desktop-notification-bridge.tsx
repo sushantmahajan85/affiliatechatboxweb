@@ -46,6 +46,9 @@ export function DesktopNotificationBridge() {
       const off = await subscribeForegroundFcm((title, body, url, tag) => {
         if (!alive || Notification.permission !== "granted") return;
         if (!getDesktopPushMasterEnabled()) return;
+        const isChat =
+          tag.includes("chat_message") || url.includes("/chats");
+        if (isChat && !getDesktopChatNotificationsEnabled()) return;
         try {
           const n = new Notification(title, { body, tag });
           n.onclick = () => {

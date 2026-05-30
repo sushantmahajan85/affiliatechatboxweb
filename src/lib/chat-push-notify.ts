@@ -25,9 +25,18 @@ export async function notifyFirestoreChatPush(params: {
       }),
     });
     if (!res.ok) {
-      console.warn("[fcm] firestore-push failed:", res.status);
+      let detail = "";
+      try {
+        const body = (await res.json()) as { message?: string };
+        detail = body.message ? `: ${body.message}` : "";
+      } catch {
+        /* ignore */
+      }
+      console.warn(
+        `[fcm] firestore-push failed (${res.status})${detail} — chat push not sent to receiver`
+      );
     }
   } catch (err) {
-    console.warn("[fcm] firestore-push error:", err);
+    console.warn("[fcm] firestore-push error — chat push not sent:", err);
   }
 }

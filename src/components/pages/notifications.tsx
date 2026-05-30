@@ -30,7 +30,9 @@ export function NotificationsPage() {
   });
   const [markAllRead] = useMarkAllReadMutation();
 
-  const allNotifications = (notificationsData?.notifs || []).filter(n => n.type !== "chat_request");
+  const allNotifications = (notificationsData?.notifs || []).filter(
+    (n) => n.type !== "chat_request"
+  );
   
   const filteredNotifications = allNotifications.filter(notif => {
     const matchesFilter = filter === 'all' || !notif.isRead;

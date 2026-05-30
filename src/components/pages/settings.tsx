@@ -145,7 +145,7 @@ export function SettingsPage() {
           <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Push Notifications</span>
             <span className="text-[13px] text-[#757575]">
-              Firebase web push (same FCM pipeline as the Android app): works in the background and when the tab is closed (if the browser allows).
+              Registers this browser for Firebase push (posts, admin alerts, and chat messages when the tab is in the background).
             </span>
             {permLabel && (
               <span
@@ -170,7 +170,7 @@ export function SettingsPage() {
           <div className="flex flex-col gap-0.5 max-w-[70%]">
             <span className="text-[16px] font-bold text-[#1A1A1A]">Chat Notifications</span>
             <span className="text-[13px] text-[#757575]">
-              Desktop alerts for new unread messages while this site is open
+              Desktop alerts for new chat messages while you are on the site (requires Push Notifications enabled above)
             </span>
           </div>
           <SettingsToggle enabled={chatEnabled} setEnabled={onChatToggle} />

@@ -23,13 +23,38 @@ function resolveOpenUrl(data: Record<string, string> | undefined): string {
   return `${origin}/notifications`;
 }
 
+const FCM_SW_URL = "/firebase-messaging-sw.js";
+
+function isFcmServiceWorkerRegistration(
+  registration: ServiceWorkerRegistration
+): boolean {
+  const scriptUrl =
+    registration.active?.scriptURL ??
+    registration.installing?.scriptURL ??
+    registration.waiting?.scriptURL ??
+    "";
+  return scriptUrl.includes("firebase-messaging-sw.js");
+}
+
 async function getMessagingServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
-  const existing = await navigator.serviceWorker.getRegistration("/");
-  if (existing?.active) {
-    await existing.update();
-    return existing;
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  const existingFcm = registrations.find(isFcmServiceWorkerRegistration);
+  if (existingFcm) {
+    await existingFcm.update();
+    if (!existingFcm.active) {
+      await navigator.serviceWorker.ready;
+    }
+    return existingFcm;
   }
-  const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+
+  const swCheck = await fetch(FCM_SW_URL, { method: "HEAD", cache: "no-store" });
+  if (!swCheck.ok) {
+    throw new Error(
+      `${FCM_SW_URL} is missing (HTTP ${swCheck.status}). Run \`npm run dev\` or \`npm run build\` so predev generates it, and set NEXT_PUBLIC_FIREBASE_* in .env.local.`
+    );
+  }
+
+  const registration = await navigator.serviceWorker.register(FCM_SW_URL, {
     scope: "/",
   });
   await navigator.serviceWorker.ready;
@@ -42,6 +67,9 @@ function mapFcmError(err: unknown): string {
     err && typeof err === "object" && "code" in err
       ? String((err as { code?: string }).code)
       : "";
+  const message =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "";
+
   if (code === "messaging/permission-blocked") {
     return "Notifications are blocked in your browser. Allow them in site settings and try again.";
   }
@@ -54,8 +82,33 @@ function mapFcmError(err: unknown): string {
   if (code === "messaging/unsupported-browser") {
     return "This browser does not support Firebase web push.";
   }
-  if (err instanceof Error && err.message) return err.message;
+  if (code === "messaging/invalid-vapid-key") {
+    return "Invalid VAPID key. Copy the Web Push key pair from Firebase Console → Project settings → Cloud Messaging (same project as NEXT_PUBLIC_FIREBASE_PROJECT_ID).";
+  }
+  if (/push service/i.test(message)) {
+    return [
+      "Browser push service unavailable.",
+      "Use Chrome or Edge on HTTPS (or http://localhost only—not http://192.168.x.x).",
+      "Allow notifications for this site.",
+      "Brave: enable brave://settings/privacy → “Use Google services for push messaging”.",
+      "Then DevTools → Application → Service workers → Unregister, clear site data, and try again.",
+    ].join(" ");
+  }
+  if (message) return message;
   return "Could not obtain a Firebase web push token.";
+}
+
+function assertWebPushEnvironment(): string | null {
+  if (typeof window === "undefined") return "Web push is only available in the browser.";
+  if (!window.isSecureContext) {
+    const host = window.location.hostname;
+    const local =
+      host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+    if (!local) {
+      return `Web push requires HTTPS (you are on ${window.location.protocol}//${host}). Open https://${host} or use http://localhost for local testing.`;
+    }
+  }
+  return null;
 }
 
 export async function syncWebFcmTokenToServer(
@@ -75,6 +128,18 @@ export async function syncWebFcmTokenToServer(
       reason:
         "Missing NEXT_PUBLIC_FIREBASE_VAPID_KEY (Firebase Console → Cloud Messaging → Web Push certificates).",
     };
+  }
+  if (!/^B[A-Za-z0-9_-]{80,}$/.test(vapidKey)) {
+    return {
+      ok: false,
+      reason:
+        "NEXT_PUBLIC_FIREBASE_VAPID_KEY looks invalid. Paste the full Web Push key pair public key from Firebase Console (starts with B, ~88 characters).",
+    };
+  }
+
+  const envError = assertWebPushEnvironment();
+  if (envError) {
+    return { ok: false, reason: envError };
   }
 
   try {

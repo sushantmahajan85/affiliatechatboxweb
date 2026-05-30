@@ -38,11 +38,6 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
   }
 }
 
-export function shouldDeferDesktopNotificationToOs(): boolean {
-  if (typeof document === "undefined") return false;
-  return document.visibilityState === "hidden";
-}
-
 export function tryShowDesktopNotification(options: {
   title: string;
   body: string;
@@ -50,8 +45,15 @@ export function tryShowDesktopNotification(options: {
   navigateUrl?: string;
 }): void {
   if (!browserNotificationsSupported() || Notification.permission !== "granted") return;
-  if (!getDesktopPushMasterEnabled()) return;
-  if (!shouldDeferDesktopNotificationToOs()) return;
+  if (!getDesktopChatNotificationsEnabled()) return;
+  // Background tab: FCM service worker handles alerts when push master is on.
+  if (
+    getDesktopPushMasterEnabled() &&
+    typeof document !== "undefined" &&
+    document.visibilityState === "hidden"
+  ) {
+    return;
+  }
   try {
     const n = new Notification(options.title, {
       body: options.body,
