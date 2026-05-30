@@ -1,5 +1,5 @@
 "use client";
-import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { useGetAllUsersQuery } from "@/store/endpoints/members";
 import { clsx } from "clsx";
@@ -25,8 +25,32 @@ const getFlagEmoji = (countryCode: string) => {
 import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
-import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
+import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+
+type DirectoryUserRow = {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  country?: string;
+  flag?: string;
+  isGoogleVerified?: boolean;
+  isLinkedinVerified?: boolean;
+  isverified?: boolean;
+};
+
+type DirectoryMember = {
+  id: string;
+  name: string;
+  avatar: string;
+  country: string;
+  flag: string;
+  isGoogleVerified: boolean;
+  isLinkedinVerified: boolean;
+  verified: boolean;
+  email?: string;
+};
 
 export function DirectoryPage() {
   const router = useRouter();
@@ -40,31 +64,13 @@ export function DirectoryPage() {
   });
 
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
-  const [linkedinGuardReason, setLinkedinGuardReason] = useState<
-    "sender_not_verified" | "recipient_not_verified" | null
-  >(null);
 
-  const handleStartChat = (
-    memberId: string,
-    memberLinkedinVerified: boolean,
-    memberIsAdmin?: boolean
-  ) => {
+  const handleStartChat = (memberId: string, memberLinkedinVerified: boolean) => {
     if (!currentUser) {
       dispatch(openAuthModal());
       return;
     }
-    if (isSelfChatPartner(currentUser._id, memberId)) {
-      toast.error("You cannot chat with yourself");
-      return;
-    }
-    const blockReason = getLinkedinChatBlockReason(
-      currentUser.isLinkedinVerified,
-      memberLinkedinVerified,
-      currentUser.role === "admin",
-      memberIsAdmin
-    );
-    if (blockReason) {
-      setLinkedinGuardReason(blockReason);
+    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified, currentUser.role === "admin")) {
       setLinkedinGuardOpen(true);
       return;
     }
@@ -85,8 +91,8 @@ export function DirectoryPage() {
   const { data, isLoading: isApiLoading, error } = useGetAllUsersQuery();
   
   // Map backend users to local format
-  const rawUsers = data?.users || [];
-  const members = rawUsers.map((u: any) => ({
+  const rawUsers = (data?.users ?? []) as DirectoryUserRow[];
+  const members: DirectoryMember[] = rawUsers.map((u) => ({
     id: u._id,
     name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "Unnamed User",
     avatar: resolveUserProfileImageUrl(u, `${u.firstName || "U"} ${u.lastName || "U"}`),
@@ -95,12 +101,12 @@ export function DirectoryPage() {
     flag: u.flag?.length === 2 ? getFlagEmoji(u.flag) : (u.flag || "🌐"),
     isGoogleVerified: u.isGoogleVerified || false,
     isLinkedinVerified: u.isLinkedinVerified || false,
-    isAdmin: u.role === "admin",
     verified: u.isverified || false,
     email: u.email
   }));
 
-  const filteredMembers = members.filter((member: any) => 
+  const filteredMembers = members.filter(
+    (member) =>
     member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
     member.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -180,7 +186,7 @@ export function DirectoryPage() {
       {/* Grid of Member Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <AnimatePresence mode="popLayout">
-          {currentMembers.map((member: any) => (
+          {currentMembers.map((member) => (
             <motion.div 
               layout
               initial={{ opacity: 0, y: 20 }}
@@ -223,7 +229,7 @@ export function DirectoryPage() {
 
               <div className="w-full pt-4 border-t border-[#F3F4F6]">
                 <button 
-                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified, member.isAdmin)}
+                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified)}
                   className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
                 >
                   <MessageCircle className="w-4 h-4" />
@@ -290,11 +296,7 @@ export function DirectoryPage() {
       )}
     </div>
 
-    <LinkedinChatGuardDialog
-      open={linkedinGuardOpen}
-      onOpenChange={setLinkedinGuardOpen}
-      reason={linkedinGuardReason}
-    />
+    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
     </>
   );
 }
