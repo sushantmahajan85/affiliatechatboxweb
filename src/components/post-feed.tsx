@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import {
-  useGetAllPostsQuery,
+  useGetAllPostsFeedQuery,
   useGetPinnedPostsQuery,
   useGetUserPostsQuery,
   usePinPostMutation,
@@ -46,15 +46,30 @@ interface PostFeedProps {
   activeTab: string;
 }
 
+const PAGE_SIZE = 10;
+const SCROLL_ROOT_ID = "app-main-scroll";
+
+function getScrollRoot(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  return document.getElementById(SCROLL_ROOT_ID);
+}
+
 export function PostFeed({ activeTab }: PostFeedProps) {
   const router = useRouter();
-  const [limit, setLimit] = useState(10);
-  const observerTarget = useRef(null);
+  const [page, setPage] = useState(1);
+  const [visibleMyCount, setVisibleMyCount] = useState(PAGE_SIZE);
+  const [feedPosts, setFeedPosts] = useState<any[]>([]);
+  const [feedHasMore, setFeedHasMore] = useState(true);
+  const observerTarget = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRef = useRef(false);
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
   const dispatch = useAppDispatch();
 
   // Queries
-  const allPostsQuery = useGetAllPostsQuery(limit, { skip: activeTab !== "all" });
+  const allPostsQuery = useGetAllPostsFeedQuery(
+    { page, pageSize: PAGE_SIZE },
+    { skip: activeTab !== "all" }
+  );
   const myPostsQuery = useGetUserPostsQuery(user?._id || "", { skip: activeTab !== "my" || !user?._id });
   const { data: pinnedData } = useGetPinnedPostsQuery();
 
@@ -111,40 +126,89 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   };
 
   const currentQuery = activeTab === "all" ? allPostsQuery : myPostsQuery;
-  const rawPosts = currentQuery.data?.posts || [];
-  
-  const posts = useMemo(() => {
-    if (activeTab === "all") {
-        return rawPosts.filter((p: any) => p.isApproved === true);
-    }
-    // For 'my' tab, we show everything from the user query
-    return rawPosts;
-  }, [rawPosts, activeTab]);
+  const rawMyPosts = myPostsQuery.data?.posts || [];
 
-  const isLoading = currentQuery.isLoading;
+  useEffect(() => {
+    if (activeTab !== "all" || !allPostsQuery.data) return;
+    const batch = allPostsQuery.data.posts || [];
+    setFeedPosts((prev) => {
+      if (page === 1) return batch;
+      const seen = new Set(prev.map((p) => p._id));
+      return [...prev, ...batch.filter((p) => !seen.has(p._id))];
+    });
+    setFeedHasMore(allPostsQuery.data.hasMore ?? batch.length >= PAGE_SIZE);
+  }, [activeTab, allPostsQuery.data, page]);
+
+  const posts = useMemo(() => {
+    if (activeTab === "my") {
+      return rawMyPosts.slice(0, visibleMyCount);
+    }
+    return feedPosts;
+  }, [activeTab, feedPosts, rawMyPosts, visibleMyCount]);
+
+  const hasMore = activeTab === "all" ? feedHasMore : rawMyPosts.length > visibleMyCount;
+
+  const isLoading = currentQuery.isLoading && (activeTab === "all" ? page === 1 : true);
+  const isFetching = currentQuery.isFetching;
   const error = currentQuery.error;
 
-  // Infinite Scroll Observer
   useEffect(() => {
+    if (!isFetching) {
+      loadingMoreRef.current = false;
+    }
+  }, [isFetching]);
+
+  useEffect(() => {
+    const target = observerTarget.current;
+    const scrollRoot = getScrollRoot();
+    if (!target || !hasMore) return;
+
+    const loadNextPage = () => {
+      if (loadingMoreRef.current || isFetching || !hasMore) return;
+      loadingMoreRef.current = true;
+      if (activeTab === "all") {
+        setPage((prev) => prev + 1);
+      } else {
+        setVisibleMyCount((prev) => prev + PAGE_SIZE);
+        loadingMoreRef.current = false;
+      }
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && posts.length >= limit) {
-          setLimit((prev) => prev + 10);
+        if (entries[0]?.isIntersecting) {
+          loadNextPage();
         }
       },
-      { threshold: 1.0 }
+      { root: scrollRoot, threshold: 0, rootMargin: "200px" }
     );
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
+    observer.observe(target);
 
-    return () => observer.disconnect();
-  }, [posts.length, limit]);
+    const onScroll = () => {
+      const root = scrollRoot;
+      if (!root) return;
+      const targetRect = target.getBoundingClientRect();
+      const rootRect = root.getBoundingClientRect();
+      if (targetRect.top <= rootRect.bottom + 200) {
+        loadNextPage();
+      }
+    };
 
-  // Reset limit when switching tabs
+    scrollRoot?.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      scrollRoot?.removeEventListener("scroll", onScroll);
+    };
+  }, [hasMore, isFetching, activeTab, posts.length]);
+
   useEffect(() => {
-    setLimit(10);
+    setPage(1);
+    setVisibleMyCount(PAGE_SIZE);
+    setFeedPosts([]);
+    setFeedHasMore(true);
+    loadingMoreRef.current = false;
   }, [activeTab]);
 
   const handlePin = async (e: React.MouseEvent, postId: string) => {
@@ -171,7 +235,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     }
   };
 
-  if (isLoading && limit === 10) {
+  if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-pulse">
         {[1, 2, 3, 4].map((i) => (
@@ -186,6 +250,17 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       <div className="bg-white p-12 rounded-[14px] text-center col-span-full">
         <h3 className="text-[18px] font-bold text-red-600">Failed to load posts</h3>
         <p className="text-[#757575]">Please try again later.</p>
+      </div>
+    );
+  }
+
+  if (!isLoading && posts.length === 0) {
+    return (
+      <div className="bg-white p-12 rounded-[14px] text-center col-span-full">
+        <h3 className="text-[18px] font-bold text-[#1A1A2E]">No posts yet</h3>
+        <p className="text-[#757575]">
+          {activeTab === "my" ? "You have not created any posts." : "Check back later for new posts."}
+        </p>
       </div>
     );
   }
@@ -330,9 +405,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
         })}
       </div>
 
-      {/* Infinite Scroll target */}
-      <div ref={observerTarget} className="h-10 flex items-center justify-center">
-        {currentQuery.isFetching && posts.length > 0 && (
+      <div ref={observerTarget} className="h-12 flex items-center justify-center">
+        {isFetching && posts.length > 0 && hasMore && (
           <div className="w-6 h-6 border-2 border-[#0A7EA4] border-t-transparent rounded-full animate-spin" />
         )}
       </div>

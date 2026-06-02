@@ -28,7 +28,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
         />
         
         <div className="flex-1 flex overflow-hidden relative">
-          <main className="flex-1 p-4 md:p-6 overflow-y-auto relative no-scrollbar">
+          <main id="app-main-scroll" className="flex-1 p-4 md:p-6 overflow-y-auto relative no-scrollbar">
             <div className="max-w-[1000px] mx-auto overflow-hidden no-scrollbar">
               <style>{`
                 .no-scrollbar::-webkit-scrollbar { display: none; }

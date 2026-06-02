@@ -9,6 +9,17 @@ export const postsApi = api.injectEndpoints({
           ? [...result.posts.map(({ _id }: any) => ({ type: 'Post' as const, id: _id })), 'Post']
           : ['Post'],
     }),
+    getAllPostsFeed: builder.query<
+      { posts: any[]; hasMore: boolean; page: number; pageSize: number },
+      { page: number; pageSize?: number }
+    >({
+      query: ({ page, pageSize = 10 }) =>
+        `/api/posts/get_all_posts?page=${page}&pageSize=${pageSize}`,
+      providesTags: (result) =>
+        result
+          ? [...result.posts.map(({ _id }: any) => ({ type: "Post" as const, id: _id })), "Post"]
+          : ["Post"],
+    }),
     getPostById: builder.query<any, string>({
       query: (postId) => `/api/posts/${postId}/get_post`,
       providesTags: (result, error, id) => [{ type: 'Post', id }],
@@ -72,6 +83,7 @@ export const postsApi = api.injectEndpoints({
 
 export const {
   useGetAllPostsQuery,
+  useGetAllPostsFeedQuery,
   useGetPostByIdQuery,
   useGetUserPostsQuery,
   useCreatePostMutation,
