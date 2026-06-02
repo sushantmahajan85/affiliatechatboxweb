@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import bgImage from "../../../public/assets/authBG.jpg";
-import { getApiBaseUrl } from "@/lib/api-base-url";
+import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
 import { useGoogleLogin } from "@react-oauth/google";
 
 // SVG Icons for Google and LinkedIn
@@ -80,7 +80,7 @@ export function AuthPage() {
   const handleLinkedinLogin = () => {
     try {
       setError(null);
-      window.location.href = `${getApiBaseUrl()}/auth/linkedin?t=${Date.now()}`;
+      window.location.href = getLinkedInAuthUrl();
     } catch (err: any) {
       setError("Failed to initiate LinkedIn login");
     }

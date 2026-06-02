@@ -18,7 +18,7 @@ import {
 } from "@/lib/firebase-phone-auth";
 import { setCredentials } from "@/store/authSlice";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
-import { getApiBaseUrl } from "@/lib/api-base-url";
+import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
 import { useGoogleLogin } from "@react-oauth/google";
 import { toast } from "sonner";
 import {
@@ -56,9 +56,9 @@ import {
   FaLinkedin, 
   FaInstagram, 
   FaFacebook, 
-  FaTelegram, 
-  FaSkype 
+  FaTelegram
 } from "react-icons/fa";
+import { BsMicrosoftTeams } from "react-icons/bs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -307,7 +307,7 @@ export function ProfilePage({ id }: { id?: string }) {
   });
 
   const startLinkedinVerification = (): void => {
-    window.location.href = `${getApiBaseUrl()}/auth/linkedin?t=${Date.now()}`;
+    window.location.href = getLinkedInAuthUrl();
   };
 
   const [isEditing, setIsEditing] = useState(false);
@@ -715,21 +715,21 @@ export function ProfilePage({ id }: { id?: string }) {
               )}
             </div>
             <div>
-              <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Skype</label>
+              <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Teams</label>
               {isEditing ? (
                 <div className="relative">
-                  <FaSkype className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
+                  <BsMicrosoftTeams className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B]" />
                   <input 
                     type="text" 
                     value={editValues.skype}
                     onChange={(e) => setEditValues({ ...editValues, skype: e.target.value })}
                     className="w-full pl-10 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
-                    placeholder="Skype ID"
+                    placeholder="Teams ID"
                   />
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-sm text-[#1A1A1A] bg-[#F8FAFC] p-2 rounded-lg">
-                  <FaSkype className="w-4 h-4 text-[#00AFF0]" />
+                  <BsMicrosoftTeams className="w-4 h-4 text-[#6264A7]" />
                   <span>{profile.skype || "Not connected"}</span>
                 </div>
               )}

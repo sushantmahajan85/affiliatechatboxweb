@@ -174,9 +174,6 @@ const renderContent = (text: string) => {
           <span className="font-medium text-[15px]">Back to feed</span>
         </button>
         <div className="flex items-center gap-2">
-           <button className="p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors" title="Report">
-            <FiFlag className="w-5 h-5" />
-          </button>
           <button className="p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors">
             <FiMoreVertical className="w-5 h-5" />
           </button>

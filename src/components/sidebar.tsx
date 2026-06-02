@@ -5,7 +5,6 @@ import {
   Building2,
   Headset,
   Home,
-  LogOut,
   Menu,
   MessageSquare,
   Smartphone,
@@ -18,7 +17,7 @@ import { useState } from "react";
 
 import googlePlayQr from "@/imports/qr-code-google-playstore.png";
 import appStoreQr from "@/imports/qr-code-appstore.png";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
 import {
   Dialog,
@@ -51,27 +50,15 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-import { logout } from "@/store/authSlice";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { openAuthModal } from "@/store/uiSlice";
 import { isAuthRequiredMenuPath } from "@/lib/auth-guard-paths";
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showAppQrModal, setShowAppQrModal] = useState(false);
-  const router = useRouter();
   const pathname = usePathname();
   const dispatch = useAppDispatch();
-  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
-
-  const handleLogout = () => {
-    if (!isAuthenticated) {
-      dispatch(openAuthModal());
-      return;
-    }
-    dispatch(logout());
-    router.push("/login");
-  };
+  const { isAuthenticated } = useAppSelector((state) => state.auth);
 
   const handleProtectedNav = () => {
     dispatch(openAuthModal());
@@ -267,18 +254,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </Link>
             </div>
           )}
-          <button
-            onClick={handleLogout}
-            className={clsx(
-              "w-full flex items-center transition-colors",
-              isCollapsed ? "justify-center h-[52px]" : "gap-4 px-4 h-[52px] text-[15px]",
-              "text-[#757575] hover:bg-[#F5F5F5]"
-            )}
-            title={isCollapsed ? "Logout" : ""}
-          >
-            <LogOut className="w-5 h-5 shrink-0" />
-            {!isCollapsed && <span>{isAuthenticated ? "Logout" : "Sign In"}</span>}
-          </button>
         </div>
       </aside>
 

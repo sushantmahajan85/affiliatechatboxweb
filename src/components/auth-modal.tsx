@@ -20,7 +20,7 @@ import {
   useMobileContactMutation, 
   useVerifyUserMutation 
 } from "@/store/endpoints/auth";
-import { getApiBaseUrl } from "@/lib/api-base-url";
+import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
 import { useGoogleLogin } from "@react-oauth/google";
 
 // SVG Icons (Reused from auth.tsx)
@@ -90,7 +90,7 @@ export function AuthModal() {
 
   const handleLinkedinLogin = () => {
     // Calling the backend redirect endpoint directly is cleaner if the backend handles the full flow
-    window.location.href = `${getApiBaseUrl()}/auth/linkedin?t=${Date.now()}`;
+    window.location.href = getLinkedInAuthUrl();
   };
 
   // LinkedIn return (?linkedin_success=) is handled globally by LinkedInOAuthCallback in Providers.
