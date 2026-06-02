@@ -51,6 +51,7 @@ interface SidebarProps {
 }
 
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
+import { openAuthModal } from "@/store/uiSlice";
 import { isAuthRequiredMenuPath } from "@/lib/auth-guard-paths";
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
