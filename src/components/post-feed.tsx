@@ -129,6 +129,14 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   const rawMyPosts = myPostsQuery.data?.posts || [];
 
   useEffect(() => {
+    setPage(1);
+    setVisibleMyCount(PAGE_SIZE);
+    setFeedPosts([]);
+    setFeedHasMore(true);
+    loadingMoreRef.current = false;
+  }, [activeTab]);
+
+  useEffect(() => {
     if (activeTab !== "all" || !allPostsQuery.data) return;
     const batch = allPostsQuery.data.posts || [];
     setFeedPosts((prev) => {
@@ -148,7 +156,10 @@ export function PostFeed({ activeTab }: PostFeedProps) {
 
   const hasMore = activeTab === "all" ? feedHasMore : rawMyPosts.length > visibleMyCount;
 
-  const isLoading = currentQuery.isLoading && (activeTab === "all" ? page === 1 : true);
+  const isLoading =
+    posts.length === 0 &&
+    (currentQuery.isLoading || currentQuery.isFetching) &&
+    (activeTab === "all" ? page === 1 : true);
   const isFetching = currentQuery.isFetching;
   const error = currentQuery.error;
 
@@ -202,14 +213,6 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       scrollRoot?.removeEventListener("scroll", onScroll);
     };
   }, [hasMore, isFetching, activeTab, posts.length]);
-
-  useEffect(() => {
-    setPage(1);
-    setVisibleMyCount(PAGE_SIZE);
-    setFeedPosts([]);
-    setFeedHasMore(true);
-    loadingMoreRef.current = false;
-  }, [activeTab]);
 
   const handlePin = async (e: React.MouseEvent, postId: string) => {
     e.stopPropagation();
