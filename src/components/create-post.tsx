@@ -15,6 +15,8 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { validateMediaUpload } from "@/lib/media-upload-limits";
+import { GENERAL_POST_TYPE } from "@/lib/post-tags";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import {
   Dialog,
@@ -76,14 +78,17 @@ export function CreatePost() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
-        toast.error("File size too large. Max 10MB allowed.");
-        return;
-      }
-      setFile(selectedFile);
-      setPreviewUrl(URL.createObjectURL(selectedFile));
+    if (!selectedFile) return;
+
+    const validation = validateMediaUpload(selectedFile);
+    if (!validation.ok) {
+      toast.error(validation.message);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
     }
+
+    setFile(selectedFile);
+    setPreviewUrl(URL.createObjectURL(selectedFile));
   };
 
   const removeFile = () => {
@@ -129,16 +134,20 @@ export function CreatePost() {
       return;
     }
 
+    if (selectedTags.length === 0) {
+      toast.error("Please add at least one tag before posting.");
+      setTagsDialogOpen(true);
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append("postContent", content);
-      formData.append("tag", category || "blank");
+      formData.append("tag", category || GENERAL_POST_TYPE);
       formData.append("addedToLinkedin", String(canShareToLinkedin && shareToLinkedin));
-      
+
       const tagLine = formatTagsForPostDescription(selectedTags);
-      if (tagLine) {
-        formData.append("postDescription", tagLine);
-      }
+      formData.append("postDescription", tagLine);
 
       if (file) {
         formData.append("postMedia", file);
@@ -273,7 +282,7 @@ export function CreatePost() {
               <option value="" disabled>
                 Post type
               </option>
-              <option value="blank">Blank</option>
+              <option value={GENERAL_POST_TYPE}>General</option>
               <option value="sell">Sell</option>
               <option value="buy">Buy</option>
             </select>
@@ -299,9 +308,11 @@ export function CreatePost() {
             <Tag className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">
               {selectedTags.length > 0 ? `Tags (${selectedTags.length})` : "Add Tags"}
+              <span className="text-red-500 ml-0.5" aria-hidden>*</span>
             </span>
             <span className="sm:hidden">
               {selectedTags.length > 0 ? selectedTags.length : "Tags"}
+              <span className="text-red-500 ml-0.5" aria-hidden>*</span>
             </span>
           </button>
 
@@ -329,7 +340,7 @@ export function CreatePost() {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={isLoading || (!content.trim() && !file)}
+          disabled={isLoading || (!content.trim() && !file) || selectedTags.length === 0}
           className="w-full lg:w-auto bg-[#0A7EA4] text-white font-bold text-[14px] h-[42px] px-8 rounded-[10px] hover:bg-[#086a8a] active:scale-95 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isLoading ? (
@@ -347,10 +358,10 @@ export function CreatePost() {
         <DialogContent className="sm:max-w-[480px] gap-0 p-0 overflow-hidden rounded-[32px] border-none shadow-2xl bg-white">
           <DialogHeader className="px-5 pt-5 pb-3 border-b border-[#E0E0E0] bg-white text-left">
             <DialogTitle className="text-[18px] font-bold text-[#1A1A2E]">
-              Add Tags
+              Add Tags <span className="text-red-500" aria-hidden>*</span>
             </DialogTitle>
             <DialogDescription className="text-[13px] text-[#757575]">
-              Pick suggested tags or add your own to help others find your post.
+              At least one tag is required. Pick suggested tags or add your own.
             </DialogDescription>
           </DialogHeader>
 

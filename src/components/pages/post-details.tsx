@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
+import { getPostTypeLabel, isGeneralPostType } from "@/lib/post-tags";
 import { useParams, useRouter } from "next/navigation";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
@@ -42,16 +43,11 @@ import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetPostByIdQuery } from "@/store/endpoints/posts";
 import clsx from "clsx";
 import { formatDistanceToNow } from "date-fns";
-
-// Helper to convert country code (e.g., "IN") to flag emoji
-const getFlagEmoji = (countryCode: string) => {
-  if (!countryCode || countryCode.length !== 2) return countryCode;
-  const codePoints = countryCode
-    .toUpperCase()
-    .split("")
-    .map((char) => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
-};
+import { CountryFlag } from "@/components/country-flag";
+import {
+  ReportPostDialog,
+  type ReportPostTarget,
+} from "@/components/report-post-dialog";
 
 export function PostDetailsPage() {
   const { id } = useParams();
@@ -60,6 +56,8 @@ export function PostDetailsPage() {
   const { isAuthenticated, user: currentUser } = useAppSelector((state) => state.auth);
   const { data, isLoading, error } = useGetPostByIdQuery(id as string);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportPostTarget | null>(null);
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
 
@@ -74,6 +72,20 @@ export function PostDetailsPage() {
   const [linkedinGuardReason, setLinkedinGuardReason] = useState<
     "sender_not_verified" | "recipient_not_verified" | null
   >(null);
+
+  const openReportDialog = () => {
+    if (!isAuthenticated || !currentUser) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (!data?.post) return;
+    setReportTarget({
+      postAuthorUserId: String(data.post.userId),
+      postContent: data.post.postContent || "",
+      postUserName: data.post.userName || "Unknown",
+    });
+    setReportOpen(true);
+  };
 
   const handleStartChat = () => {
     if (!isAuthenticated || !currentUser) {
@@ -211,9 +223,7 @@ const renderContent = (text: string) => {
                         <FaLinkedin className="w-full h-full text-white" />
                       </div>
                     )}
-                    <div className="text-[16px] ml-0.5" title={post.flag}>
-                      {getFlagEmoji(post.flag)}
-                    </div>
+                    <CountryFlag flag={post.flag} size={16} className="ml-0.5" />
                 </div>
               </div>
               <span className="text-[14px] text-[#757575]">
@@ -225,9 +235,9 @@ const renderContent = (text: string) => {
             "px-4 py-1.5 rounded-full text-[14px] font-medium uppercase",
             post.tag === "buy" && "bg-[#D1FAE5] text-[#065F46]",
             post.tag === "sell" && "bg-[#FEF3C7] text-[#92400E]",
-            (post.tag === "blank" || !post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
+            isGeneralPostType(post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
           )}>
-            {post.tag === "blank" || !post.tag ? "General" : post.tag}
+            {getPostTypeLabel(post.tag)}
           </span>
         </div>
 
@@ -272,7 +282,11 @@ const renderContent = (text: string) => {
             <FiShare2 className="w-5 h-5 text-[#6B7280]" />
             <span>Share Post</span>
           </button>
-          <button className="sm:w-auto px-6 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#EF4444] text-[15px] font-medium hover:bg-[#FEF2F2] transition-colors">
+          <button
+            type="button"
+            onClick={openReportDialog}
+            className="sm:w-auto px-6 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#EF4444] text-[15px] font-medium hover:bg-[#FEF2F2] transition-colors"
+          >
             <FiFlag className="w-5 h-5" />
             <span className="sm:hidden lg:inline">Report Post</span>
           </button>
@@ -385,6 +399,11 @@ const renderContent = (text: string) => {
         </DialogContent>
       </Dialog>
     </div>
+    <ReportPostDialog
+      open={reportOpen}
+      onOpenChange={setReportOpen}
+      target={reportTarget}
+    />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

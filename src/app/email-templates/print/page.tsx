@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { appendEmailDisclaimer } from "@/lib/email-disclaimer";
+import { appendEmailDisclaimer, emailPreferencesFooterHtml } from "@/lib/email-disclaimer";
 
 const BRAND = "#0A7EA4";
 
@@ -28,7 +28,7 @@ const templates = [
           </div>
         </div>
         <div style="background-color:#fcfcfc;padding:20px;text-align:center;border-top:1px solid #f0f0f0;">
-          <p style="font-size:12px;color:#94a3b8;margin:0;">This is an automated notification. You can manage your email preferences in your account settings.</p>
+          ${emailPreferencesFooterHtml({ automated: true })}
         </div>
       </div>`,
     variables: ["receiver.firstName", "senderName", "message"],
@@ -49,6 +49,9 @@ const templates = [
           <p style="color:#555;">Thank you!</p>
           <br/>
           <p style="color:#888;">This email was sent automatically. Please do not reply to this email.</p>
+          <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;">
+            ${emailPreferencesFooterHtml({ automated: true })}
+          </div>
         </div>
       </div>`,
     variables: ["userName (firstName)", "senderName"],
@@ -75,7 +78,7 @@ const templates = [
           </div>
         </div>
         <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
-          <p style="font-size:12px;color:#94a3b8;margin:0;">You can manage your email preferences in account settings.</p>
+          ${emailPreferencesFooterHtml()}
         </div>
       </div>`,
     variables: ["userName (firstName)", "senderName", "postContent"],

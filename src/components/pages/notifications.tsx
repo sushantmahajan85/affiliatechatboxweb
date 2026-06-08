@@ -28,7 +28,16 @@ export function NotificationsPage() {
   const { data: notificationsData, isLoading } = useGetNotificationsQuery(user?._id || "", {
     skip: !isAuthenticated || !user?._id,
   });
-  const [markAllRead] = useMarkAllReadMutation();
+  const [markAllRead, { isLoading: isMarkingAllRead }] = useMarkAllReadMutation();
+
+  const handleMarkAllRead = async () => {
+    if (!user?._id || isMarkingAllRead) return;
+    try {
+      await markAllRead(user._id).unwrap();
+    } catch {
+      // RTK optimistic update rolls back on failure
+    }
+  };
 
   const allNotifications = (notificationsData?.notifs || []).filter(
     (n) => n.type !== "chat_request"
@@ -57,12 +66,14 @@ export function NotificationsPage() {
           </div>
           <div className="flex items-center gap-3">
             {hasUnread && (
-              <button 
-                onClick={() => markAllRead(user?._id || "")}
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E0E0E0] rounded-xl text-sm font-medium text-[#1A1A2E] hover:bg-[#F5F5F5] transition-colors"
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                disabled={isMarkingAllRead}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-[#E0E0E0] rounded-xl text-sm font-medium text-[#1A1A2E] hover:bg-[#F5F5F5] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-4 h-4" />
-                Mark all as read
+                {isMarkingAllRead ? "Marking..." : "Mark all as read"}
               </button>
             )}
             <button className="p-2 bg-white border border-[#E0E0E0] rounded-xl hover:bg-[#F5F5F5] transition-colors text-[#757575]">

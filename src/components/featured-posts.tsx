@@ -20,10 +20,12 @@ import {
 import { useGetPinnedPostsQuery, useUnpinPostMutation } from "@/store/endpoints/posts";
 import { useAppSelector } from "@/store/hooks";
 import { formatDistanceToNow } from "date-fns";
+import { isGeneralPostType } from "@/lib/post-tags";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { FaGoogle, FaThumbtack } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { toast } from "sonner";
+import { CountryFlag } from "@/components/country-flag";
 
 export function FeaturedPosts() {
   const router = useRouter();
@@ -124,6 +126,7 @@ export function FeaturedPosts() {
                               <GrLinkedin className="w-full h-full text-white" />
                             </div>
                           )}
+                          <CountryFlag flag={post.flag || post.postId?.flag} size={13} />
                         </div>
                         {post.underApproval && (
                           <span className="bg-[#FEF3C7] text-[#92400E] text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-[#FDE68A] ml-1 shrink-0">
@@ -165,7 +168,7 @@ export function FeaturedPosts() {
                 </h3>
 
                 <div className="flex flex-wrap gap-2">
-                   {tag !== "blank" && tag && (
+                   {!isGeneralPostType(tag) && tag && (
                     <span className="text-[#0A7EA4] text-[12px] font-medium uppercase">
                       #{tag}
                     </span>

@@ -3,6 +3,7 @@
 import { clsx } from "clsx";
 import { Loader2, Paperclip, Send, Smile, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { validateMediaUpload } from "@/lib/media-upload-limits";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -84,8 +85,9 @@ export function ChatComposer({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file || busy) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file");
+    const validation = validateMediaUpload(file, { imagesOnly: true });
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
     if (beforeAttach && !beforeAttach()) return;

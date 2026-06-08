@@ -16,7 +16,9 @@ import {
   resetPhoneRecaptcha,
   sendFirebasePhoneOtp,
 } from "@/lib/firebase-phone-auth";
-import { setCredentials } from "@/store/authSlice";
+import { setCredentials, updateUser } from "@/store/authSlice";
+import { useUpdateMobilePrivacyMutation } from "@/store/endpoints/members";
+import { Switch } from "@/components/ui/switch";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -61,38 +63,20 @@ import {
 import { BsMicrosoftTeams } from "react-icons/bs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-
-const PHONE_COUNTRY_DIAL_OPTIONS = [
-  { dial: "91", label: "India +91" },
-  { dial: "1", label: "US / CA +1" },
-  { dial: "44", label: "UK +44" },
-  { dial: "61", label: "Australia +61" },
-  { dial: "971", label: "UAE +971" },
-  { dial: "966", label: "Saudi +966" },
-  { dial: "880", label: "Bangladesh +880" },
-] as const;
-
-const DEFAULT_PHONE_DIAL = String(
-  process.env.NEXT_PUBLIC_PHONE_DEFAULT_DIAL || "91"
-).replace(/\D/g, "") || "91";
-
-function splitStoredMobileForCountryInputs(
-  fullDigits: string,
-  defaultDial: string
-): { dial: string; national: string } {
-  const raw = fullDigits.replace(/\D/g, "");
-  if (!raw) return { dial: defaultDial, national: "" };
-  const sorted = [...PHONE_COUNTRY_DIAL_OPTIONS].sort(
-    (a, b) => b.dial.length - a.dial.length
-  );
-  for (const o of sorted) {
-    if (raw.startsWith(o.dial) && raw.length > o.dial.length) {
-      return { dial: o.dial, national: raw.slice(o.dial.length) };
-    }
-  }
-  if (raw.length === 10) return { dial: defaultDial, national: raw };
-  return { dial: defaultDial, national: raw };
-}
+import { CountryFlag } from "@/components/country-flag";
+import {
+  countryCodeToFlagEmoji,
+  countryLabelFromFlag,
+  normalizeCountryCode,
+} from "@/lib/country-flag";
+import {
+  DEFAULT_COUNTRY_ISO,
+  DEFAULT_PHONE_DIAL,
+  PHONE_COUNTRIES,
+  countryOptionsForIso,
+  dialToIso,
+  splitStoredMobileForCountryInputs,
+} from "@/lib/phone-countries";
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
@@ -259,6 +243,12 @@ export function ProfilePage({ id }: { id?: string }) {
       }
 
       dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
+      const phoneIso = dialToIso(phoneCountryDial) || DEFAULT_COUNTRY_ISO;
+      try {
+        await saveFlagForIso(phoneIso);
+      } catch {
+        // Phone verified; flag sync is best-effort (same as app after number change).
+      }
       refetch();
       toast.success("Mobile verified.");
       setMobileVerifyOpen(false);
@@ -310,6 +300,10 @@ export function ProfilePage({ id }: { id?: string }) {
     window.location.href = getLinkedInAuthUrl();
   };
 
+  const [isMobilePrivate, setIsMobilePrivate] = useState(false);
+  const [mobilePrivacySaving, setMobilePrivacySaving] = useState(false);
+  const [updateMobilePrivacy] = useUpdateMobilePrivacyMutation();
+
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState({
     name: "",
@@ -330,7 +324,10 @@ export function ProfilePage({ id }: { id?: string }) {
     facebook: "",
     skype: "",
     company: "",
-    designation: ""
+    designation: "",
+    flag: "",
+    countryIso: DEFAULT_COUNTRY_ISO,
+    countryLabel: "Global",
   });
 
   const [editValues, setEditValues] = useState({ ...profile });
@@ -360,12 +357,42 @@ export function ProfilePage({ id }: { id?: string }) {
         facebook: user.Facebook || "",
         skype: user.Skype || "",
         company: user.Company || "",
-        designation: user.Designation || ""
+        designation: user.Designation || "",
+        flag: user.flag || "",
+        countryIso: normalizeCountryCode(user.flag) || DEFAULT_COUNTRY_ISO,
+        countryLabel: countryLabelFromFlag(user.flag),
       };
       setProfile(newProfile);
       setEditValues(newProfile);
+      setIsMobilePrivate(!!user.isMobilePrivate);
     }
   }, [data]);
+
+  const hasPhoneNumber =
+    Boolean(profile.phone) && profile.phone !== "No phone number";
+
+  const onMobilePrivacyChange = async (next: boolean) => {
+    if (!currentUserId || mobilePrivacySaving) return;
+    setIsMobilePrivate(next);
+    setMobilePrivacySaving(true);
+    try {
+      const res = await updateMobilePrivacy({
+        id: String(currentUserId),
+        isMobilePrivate: next,
+      }).unwrap();
+      if (isOwnProfile && viewerUser && res.user) {
+        dispatch(updateUser({ ...viewerUser, ...res.user }));
+      }
+      toast.success(
+        next ? "Phone number is now private" : "Phone number is now visible to members"
+      );
+    } catch {
+      setIsMobilePrivate(!next);
+      toast.error("Failed to update phone privacy");
+    } finally {
+      setMobilePrivacySaving(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -390,17 +417,36 @@ export function ProfilePage({ id }: { id?: string }) {
       formData.append("Company", editValues.company);
       formData.append("Designation", editValues.designation);
 
+      if (editValues.countryIso) {
+        formData.append("flag", countryCodeToFlagEmoji(editValues.countryIso));
+      }
+
       if (selectedFile) {
         formData.append("ProfilePicture", selectedFile);
       }
 
-      await updateProfile({ userId: profileId, data: formData }).unwrap();
+      const res = await updateProfile({ userId: profileId, data: formData }).unwrap();
+      if (isOwnProfile && res?.existingUser && viewerUser) {
+        dispatch(updateUser({ ...viewerUser, ...res.existingUser }));
+      }
       refetch();
       setIsEditing(false);
       setSelectedFile(null);
       setPreviewUrl(null);
+      toast.success("Profile updated.");
     } catch (err) {
       console.error("Failed to update profile:", err);
+      toast.error(apiErrorMessage(err, "Failed to update profile."));
+    }
+  };
+
+  const saveFlagForIso = async (iso: string): Promise<void> => {
+    if (!currentUserId || !iso) return;
+    const formData = new FormData();
+    formData.append("flag", countryCodeToFlagEmoji(iso));
+    const res = await updateProfile({ userId: String(currentUserId), data: formData }).unwrap();
+    if (res?.existingUser && viewerUser) {
+      dispatch(updateUser({ ...viewerUser, ...res.existingUser }));
     }
   };
 
@@ -521,12 +567,42 @@ export function ProfilePage({ id }: { id?: string }) {
                   />
                 </div>
                 <div className="col-span-2">
+                  <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Country</label>
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white">
+                      <CountryFlag flag={editValues.countryIso} size={16} fallback="globe" />
+                    </div>
+                    <select
+                      value={editValues.countryIso}
+                      onChange={(e) => {
+                        const iso = e.target.value;
+                        setEditValues({
+                          ...editValues,
+                          countryIso: iso,
+                          countryLabel: countryLabelFromFlag(iso),
+                        });
+                      }}
+                      className="h-10 flex-1 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 text-sm text-[#1A1A1A] focus:border-[#0A7EA4] focus:outline-none"
+                    >
+                      {countryOptionsForIso(editValues.countryIso).map((c) => (
+                        <option key={c.iso} value={c.iso}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-[#94A3B8]">
+                    Same as the mobile app — country is saved with your profile flag.
+                  </p>
+                </div>
+                <div className="col-span-2">
                   <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Location</label>
                   <input 
                     type="text" 
                     value={editValues.location}
                     onChange={(e) => setEditValues({ ...editValues, location: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
+                    placeholder="City or region (optional)"
                   />
                 </div>
                 <div className="col-span-2">
@@ -574,8 +650,17 @@ export function ProfilePage({ id }: { id?: string }) {
                 </div>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-y-1 gap-x-4 mb-3">
                   <p className="text-[#64748B] text-sm flex items-center gap-1.5">
-                    <FiMapPin className="w-4 h-4" /> {profile.location}
+                    <CountryFlag flag={profile.flag || profile.countryIso} size={14} fallback="globe" />
+                    <span>{profile.countryLabel}</span>
                   </p>
+                  {profile.location && profile.location !== "Not specified" && (
+                    <>
+                      <span className="hidden sm:block w-1 h-1 bg-[#CBD5E1] rounded-full" />
+                      <p className="text-[#64748B] text-sm flex items-center gap-1.5">
+                        <FiMapPin className="w-4 h-4" /> {profile.location}
+                      </p>
+                    </>
+                  )}
                   <span className="hidden sm:block w-1 h-1 bg-[#CBD5E1] rounded-full" />
                   <p className="text-[#64748B] text-sm flex items-center gap-1.5">
                     <FiCalendar className="w-4 h-4" /> Joined {profile.joined}
@@ -756,11 +841,35 @@ export function ProfilePage({ id }: { id?: string }) {
               <span className="text-sm font-medium text-[#1A1A1A]">{profile.email}</span>
             )}
           </div>
-          {isOwnProfile && (
+          {isOwnProfile && hasPhoneNumber && (
+            <div className="py-3 border-b border-[#F8FAFC]">
+              <div className="flex justify-between items-center gap-4">
+                <span className="text-sm text-[#64748B]">Phone Number</span>
+                <span className="text-sm font-medium text-[#1A1A1A]">{profile.phone}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t border-[#F8FAFC]">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[#1A1A1A]">Keep mobile number private</p>
+                  <p className="text-xs text-[#94A3B8] mt-0.5">
+                    Hide your number from other members&apos; profiles
+                  </p>
+                </div>
+                <Switch
+                  checked={isMobilePrivate}
+                  onCheckedChange={(value) => void onMobilePrivacyChange(value)}
+                  disabled={mobilePrivacySaving}
+                  className="data-[state=checked]:bg-[#1C3A4A] shrink-0"
+                />
+              </div>
+            </div>
+          )}
+
+          {!isOwnProfile && showProfileDetailSections && hasPhoneNumber && !isMobilePrivate && (
             <div className="flex justify-between items-center py-2 border-b border-[#F8FAFC]">
               <span className="text-sm text-[#64748B]">Phone Number</span>
               <span className="text-sm font-medium text-[#1A1A1A]">{profile.phone}</span>
-            </div>)}
+            </div>
+          )}
 
           {isOwnProfile && (
             <div className="flex gap-3 pt-4">
@@ -969,9 +1078,9 @@ export function ProfilePage({ id }: { id?: string }) {
                 className="h-10 min-w-[122px] rounded-xl border border-[#E2E8F0] bg-white text-black text-sm font-medium px-2 shrink-0"
                 aria-label="Country calling code"
               >
-                {PHONE_COUNTRY_DIAL_OPTIONS.map((o) => (
+                {PHONE_COUNTRIES.map((o) => (
                   <option key={o.dial} value={o.dial}>
-                    {o.label}
+                    {o.label} +{o.dial}
                   </option>
                 ))}
               </select>

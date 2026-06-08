@@ -1,39 +1,30 @@
 "use client";
 import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { useGetAllUsersQuery } from "@/store/endpoints/members";
-import { clsx } from "clsx";
-import { ChevronLeft, ChevronRight, MapPin, MessageCircle, Search } from "lucide-react";
+import { CountryFlag } from "@/components/country-flag";
+import { useAppInfiniteScroll } from "@/hooks/use-app-infinite-scroll";
+import { countryLabelFromFlag } from "@/lib/country-flag";
+import { useGetMembersDirectoryFeedQuery } from "@/store/endpoints/members";
+import { MessageCircle, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FaGoogle } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
-import { useAppDispatch } from "@/store/hooks";
+import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
-
-// Helper to convert country code (e.g., "IN") to flag emoji
-const getFlagEmoji = (countryCode: string) => {
-  if (!countryCode || countryCode.length !== 2) return countryCode;
-  const codePoints = countryCode
-    .toUpperCase()
-    .split("")
-    .map((char) => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
-};
-
-import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { isLinkedinOnlyChatBlocked } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+
+const PAGE_SIZE = 12;
 
 type DirectoryUserRow = {
   _id: string;
   firstName?: string;
   lastName?: string;
   email?: string;
-  country?: string;
   flag?: string;
   isGoogleVerified?: boolean;
   isLinkedinVerified?: boolean;
@@ -52,25 +43,94 @@ type DirectoryMember = {
   email?: string;
 };
 
+function mapUserToMember(u: DirectoryUserRow): DirectoryMember {
+  return {
+    id: u._id,
+    name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "Unnamed User",
+    avatar: resolveUserProfileImageUrl(u, `${u.firstName || "U"} ${u.lastName || "U"}`),
+    country: countryLabelFromFlag(u.flag),
+    flag: u.flag || "",
+    isGoogleVerified: u.isGoogleVerified || false,
+    isLinkedinVerified: u.isLinkedinVerified || false,
+    verified: u.isverified || false,
+    email: u.email,
+  };
+}
+
 export function DirectoryPage() {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const { user: currentUser } = useAppSelector((state) => state.auth);
   const chatBackendIsFirebase = useChatBackendIsFirebase();
   const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
-  
+
   const { data: convData } = useGetConversationsQuery(currentUser?._id || "", {
     skip: !currentUser?._id || chatBackendIsFirebase,
   });
 
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [rawUsers, setRawUsers] = useState<DirectoryUserRow[]>([]);
+  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+    setRawUsers([]);
+    setHasMore(true);
+    setTotal(0);
+  }, [searchQuery]);
+
+  const { data, isLoading, isFetching, isError } = useGetMembersDirectoryFeedQuery({
+    page,
+    limit: PAGE_SIZE,
+    search: searchQuery,
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    const batch = (data.users || []) as DirectoryUserRow[];
+    setRawUsers((prev) => {
+      if (page === 1) return batch;
+      const seen = new Set(prev.map((u) => u._id));
+      return [...prev, ...batch.filter((u) => !seen.has(u._id))];
+    });
+    setHasMore(data.pagination?.hasMore ?? batch.length >= PAGE_SIZE);
+    setTotal(data.pagination?.total ?? 0);
+  }, [data, page]);
+
+  const members = useMemo(() => rawUsers.map(mapUserToMember), [rawUsers]);
+
+  const loadMore = useCallback(() => {
+    setPage((prev) => prev + 1);
+  }, []);
+
+  const { observerTarget } = useAppInfiniteScroll({
+    hasMore,
+    isFetching,
+    onLoadMore: loadMore,
+    enabled: members.length > 0,
+  });
 
   const handleStartChat = (memberId: string, memberLinkedinVerified: boolean) => {
     if (!currentUser) {
       dispatch(openAuthModal());
       return;
     }
-    if (isLinkedinOnlyChatBlocked(currentUser.isLinkedinVerified, memberLinkedinVerified, currentUser.role === "admin")) {
+    if (
+      isLinkedinOnlyChatBlocked(
+        currentUser.isLinkedinVerified,
+        memberLinkedinVerified,
+        currentUser.role === "admin"
+      )
+    ) {
       setLinkedinGuardOpen(true);
       return;
     }
@@ -84,51 +144,22 @@ export function DirectoryPage() {
     }
   };
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState("");
-  const itemsPerPage = 8;
+  const showInitialLoading = members.length === 0 && (isLoading || isFetching) && page === 1;
 
-  const { data, isLoading: isApiLoading, error } = useGetAllUsersQuery();
-  
-  // Map backend users to local format
-  const rawUsers = (data?.users ?? []) as DirectoryUserRow[];
-  const members: DirectoryMember[] = rawUsers.map((u) => ({
-    id: u._id,
-    name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "Unnamed User",
-    avatar: resolveUserProfileImageUrl(u, `${u.firstName || "U"} ${u.lastName || "U"}`),
-    country: u.country || "Global",
-    // Use helper if it looks like a country code, otherwise use as is
-    flag: u.flag?.length === 2 ? getFlagEmoji(u.flag) : (u.flag || "🌐"),
-    isGoogleVerified: u.isGoogleVerified || false,
-    isLinkedinVerified: u.isLinkedinVerified || false,
-    verified: u.isverified || false,
-    email: u.email
-  }));
-
-  const filteredMembers = members.filter(
-    (member) =>
-    member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    member.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    member.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const totalPages = Math.ceil(filteredMembers.length / itemsPerPage);
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentMembers = filteredMembers.slice(indexOfFirstItem, indexOfLastItem);
-
-  if (isApiLoading) {
+  if (showInitialLoading) {
     return (
       <div className="flex flex-col gap-6 animate-pulse">
         <div className="bg-white p-6 rounded-[14px] h-[100px]" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="bg-white rounded-[14px] h-[240px]" />)}
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white rounded-[14px] h-[240px]" />
+          ))}
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (isError && members.length === 0) {
     return (
       <div className="bg-white p-12 rounded-[14px] text-center">
         <h3 className="text-[18px] font-bold text-red-600">Failed to load members</h3>
@@ -137,166 +168,120 @@ export function DirectoryPage() {
     );
   }
 
-  // Pagination logic helper
-  const getPageNumbers = () => {
-    const pageNumbers = [];
-    const maxVisiblePages = 5;
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
-    } else {
-      pageNumbers.push(1);
-      if (currentPage > 3) pageNumbers.push("...");
-      
-      const start = Math.max(2, currentPage - 1);
-      const end = Math.min(totalPages - 1, currentPage + 1);
-      
-      for (let i = start; i <= end; i++) pageNumbers.push(i);
-      
-      if (currentPage < totalPages - 2) pageNumbers.push("...");
-      pageNumbers.push(totalPages);
-    }
-    return pageNumbers;
-  };
-
   return (
     <>
-    <div className="flex flex-col gap-6">
-      {/* Search Header */}
-      <div className="bg-white p-6 rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-[24px] font-bold text-[#1A1A2E]">Members Directory</h1>
-          <p className="text-[#757575] text-[14px]">Connect with {members?.length} professionals globally</p>
+      <div className="flex flex-col gap-6">
+        <div className="bg-white p-6 rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-[24px] font-bold text-[#1A1A2E]">Members Directory</h1>
+            <p className="text-[#757575] text-[14px]">
+              Connect with {total > 0 ? total : members.length} professionals globally
+            </p>
+          </div>
+          <div className="relative w-full md:w-[320px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9E9E9E]" />
+            <input
+              type="text"
+              placeholder="Search by name, email, or country code..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full h-11 bg-[#F5F7FB] border-none rounded-xl pl-10 pr-4 text-[14px] focus:ring-2 focus:ring-[#0A7EA4]/20 outline-none transition-all"
+            />
+          </div>
         </div>
-        <div className="relative w-full md:w-[320px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9E9E9E]" />
-          <input 
-            type="text"
-            placeholder="Search by name or country..."
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full h-11 bg-[#F5F7FB] border-none rounded-xl pl-10 pr-4 text-[14px] focus:ring-2 focus:ring-[#0A7EA4]/20 outline-none transition-all"
-          />
+
+        {members.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <AnimatePresence mode="popLayout">
+              {members.map((member) => (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  key={member.id}
+                  className="bg-white rounded-[14px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col items-center text-center hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all group border border-transparent hover:border-[#F0F7F9]"
+                >
+                  <div
+                    className="mb-4 cursor-pointer"
+                    onClick={() => router.push(`/profile/${member.id}`)}
+                  >
+                    <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white ring-2 ring-[#F3F4F6] group-hover:ring-[#0A7EA4]/20 transition-all mx-auto">
+                      <ImageWithFallback
+                        src={member.avatar}
+                        alt={member.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex items-center gap-1.5 mb-1 cursor-pointer"
+                    onClick={() => router.push(`/profile/${member.id}`)}
+                  >
+                    <h3 className="text-[16px] font-bold text-[#1A1A2E] line-clamp-1 hover:text-[#0A7EA4] transition-colors">
+                      {member.name}
+                    </h3>
+                    <div className="flex items-center gap-1">
+                      {member.isGoogleVerified && (
+                        <div
+                          className="w-4 h-4 rounded-full flex items-center justify-center shadow-sm"
+                          title="Google Verified"
+                        >
+                          <FaGoogle className="w-2.5 h-2.5 text-[#4285F4]" />
+                        </div>
+                      )}
+                      {member.isLinkedinVerified && (
+                        <div
+                          className="w-4 h-4 bg-[#0A66C2] rounded-[2px] flex items-center justify-center shadow-sm"
+                          title="LinkedIn Verified"
+                        >
+                          <GrLinkedin className="w-2.5 h-2.5 text-white" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-[13px] text-[#757575] mb-4 flex items-center gap-1.5 justify-center min-h-5">
+                    <CountryFlag flag={member.flag} size={14} title={member.country} />
+                    <span className="truncate max-w-[140px]">{member.country}</span>
+                  </p>
+
+                  <div className="w-full pt-4 border-t border-[#F3F4F6]">
+                    <button
+                      onClick={() => handleStartChat(member.id, member.isLinkedinVerified)}
+                      className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Start Chat</span>
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+
+        {members.length === 0 && !isError && (
+          <div className="bg-white p-12 rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] text-center flex flex-col items-center">
+            <div className="w-16 h-16 bg-[#F5F7FB] rounded-full flex items-center justify-center mb-4">
+              <Search className="w-8 h-8 text-[#9E9E9E]" />
+            </div>
+            <h3 className="text-[18px] font-bold text-[#1A1A2E]">No members found</h3>
+            <p className="text-[#757575]">Try adjusting your search criteria</p>
+          </div>
+        )}
+
+        <div ref={observerTarget} className="h-12 flex items-center justify-center pb-6">
+          {isFetching && members.length > 0 && hasMore && (
+            <div className="w-6 h-6 border-2 border-[#0A7EA4] border-t-transparent rounded-full animate-spin" />
+          )}
         </div>
       </div>
 
-      {/* Grid of Member Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <AnimatePresence mode="popLayout">
-          {currentMembers.map((member) => (
-            <motion.div 
-              layout
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              key={member.id} 
-              className="bg-white rounded-[14px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col items-center text-center hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)] transition-all group border border-transparent hover:border-[#F0F7F9]"
-            >
-              <div 
-                className="relative mb-4 cursor-pointer"
-                onClick={() => router.push(`/profile/${member.id}`)}
-              >
-                <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white ring-2 ring-[#F3F4F6] group-hover:ring-[#0A7EA4]/20 transition-all">
-                  <ImageWithFallback src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
-                </div>
-                <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#F3F4F6] text-[18px]" title={member.country}>
-                  {member.flag}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 mb-1 cursor-pointer" onClick={() => router.push(`/profile/${member.id}`)}>
-                <h3 className="text-[16px] font-bold text-[#1A1A2E] line-clamp-1 hover:text-[#0A7EA4] transition-colors">{member.name}</h3>
-                <div className="flex items-center gap-1">
-                  {member.isGoogleVerified && (
-                    <div className="w-4 h-4 rounded-full flex items-center justify-center shadow-sm" title="Google Verified">
-                      <FaGoogle className="w-2.5 h-2.5 text-[#4285F4]" />
-                    </div>
-                  )}
-                  {member.isLinkedinVerified && (
-                    <div className="w-4 h-4 bg-[#0A66C2] rounded-[2px] flex items-center justify-center shadow-sm" title="LinkedIn Verified">
-                      <GrLinkedin className="w-2.5 h-2.5 text-white" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <p className="text-[13px] text-[#757575] mb-4 h-5 flex items-center gap-1 justify-center">
-                <MapPin className="w-3 h-3" />
-                {member.country}
-              </p>
-
-              <div className="w-full pt-4 border-t border-[#F3F4F6]">
-                <button 
-                  onClick={() => handleStartChat(member.id, member.isLinkedinVerified)}
-                  className="w-full flex items-center justify-center gap-2 h-10 bg-[#0A7EA4] text-white rounded-xl text-[13px] font-bold hover:bg-[#086a8a] transition-all shadow-sm active:scale-95"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>Start Chat</span>
-                </button>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 mt-4 pb-10">
-          <button 
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            className="w-10 h-10 rounded-xl border border-[#E0E0E0] flex items-center justify-center text-[#757575] hover:bg-[#F5F5F5] disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-90"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          
-          <div className="flex items-center gap-1">
-            {getPageNumbers().map((page, i) => (
-              page === "..." ? (
-                <span key={`ellipsis-${i}`} className="w-10 h-10 flex items-center justify-center text-[#BDBDBD]">
-                  ...
-                </span>
-              ) : (
-                <button
-                  key={`page-${page}`}
-                  onClick={() => setCurrentPage(Number(page))}
-                  className={clsx(
-                    "w-10 h-10 rounded-xl text-[14px] font-bold transition-all active:scale-90",
-                    currentPage === page 
-                      ? "bg-[#0A7EA4] text-white shadow-md shadow-[#0A7EA4]/20" 
-                      : "text-[#757575] hover:bg-[#F5F5F5] border border-transparent hover:border-[#E0E0E0]"
-                  )}
-                >
-                  {page}
-                </button>
-              )
-            ))}
-          </div>
-
-          <button 
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            className="w-10 h-10 rounded-xl border border-[#E0E0E0] flex items-center justify-center text-[#757575] hover:bg-[#F5F5F5] disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-90"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-      )}
-
-      {filteredMembers.length === 0 && (
-        <div className="bg-white p-12 rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] text-center flex flex-col items-center">
-          <div className="w-16 h-16 bg-[#F5F7FB] rounded-full flex items-center justify-center mb-4">
-            <Search className="w-8 h-8 text-[#9E9E9E]" />
-          </div>
-          <h3 className="text-[18px] font-bold text-[#1A1A2E]">No members found</h3>
-          <p className="text-[#757575]">Try adjusting your search criteria</p>
-        </div>
-      )}
-    </div>
-
-    <LinkedinRecipientNotVerifiedDialog open={linkedinGuardOpen} onOpenChange={setLinkedinGuardOpen} />
+      <LinkedinRecipientNotVerifiedDialog
+        open={linkedinGuardOpen}
+        onOpenChange={setLinkedinGuardOpen}
+      />
     </>
   );
 }

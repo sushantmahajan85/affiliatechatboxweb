@@ -1,3 +1,18 @@
+const WEB_APP_ORIGIN =
+  process.env.NEXT_PUBLIC_WEB_APP_ORIGIN?.replace(/\/+$/, "") ||
+  "https://affiliatechatbox.com";
+
+export const ACCOUNT_SETTINGS_URL = `${WEB_APP_ORIGIN}/settings`;
+
+export function accountSettingsLinkHtml(label = "account settings"): string {
+  return `<a href="${ACCOUNT_SETTINGS_URL}" style="color:#0A7EA4;text-decoration:underline;">${label}</a>`;
+}
+
+export function emailPreferencesFooterHtml(options?: { automated?: boolean }): string {
+  const prefix = options?.automated ? "This is an automated notification. " : "";
+  return `<p style="font-size:12px;color:#94a3b8;margin:0;">${prefix}You can manage your email preferences in ${accountSettingsLinkHtml()}.</p>`;
+}
+
 export const EMAIL_DISCLAIMER_HTML = `
 <div style="max-width:600px;margin:0 auto;padding:14px 20px 20px;border-top:1px solid #e8ecf0;background:#fafbfc;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
   <p style="margin:0 0 6px;font-size:9px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;">Email Disclaimer</p>

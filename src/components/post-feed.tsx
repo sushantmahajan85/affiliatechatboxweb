@@ -24,6 +24,7 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
+import { getPostTypeLabel, isGeneralPostType } from "@/lib/post-tags";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { PostHashtags } from "@/components/post-hashtags";
 import { formatDistanceToNow } from "date-fns";
@@ -31,16 +32,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { toast } from "sonner";
-
-// Helper to convert country code (e.g., "IN") to flag emoji
-const getFlagEmoji = (countryCode: string) => {
-  if (!countryCode || countryCode.length !== 2) return countryCode;
-  const codePoints = countryCode
-    .toUpperCase()
-    .split("")
-    .map((char) => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
-};
+import { CountryFlag } from "@/components/country-flag";
+import {
+  ReportPostDialog,
+  type ReportPostTarget,
+} from "@/components/report-post-dialog";
 
 interface PostFeedProps {
   activeTab: string;
@@ -88,6 +84,25 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   const [linkedinGuardReason, setLinkedinGuardReason] = useState<
     "sender_not_verified" | "recipient_not_verified" | null
   >(null);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<ReportPostTarget | null>(null);
+
+  const openReportDialog = (
+    e: React.MouseEvent,
+    post: { userId: string; postContent?: string; userName?: string }
+  ) => {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
+    setReportTarget({
+      postAuthorUserId: String(post.userId),
+      postContent: post.postContent || "",
+      postUserName: post.userName || "Unknown",
+    });
+    setReportOpen(true);
+  };
 
   const handleStartChat = (
     e: React.MouseEvent,
@@ -313,9 +328,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                             <GrLinkedin className="w-full h-full text-white" />
                           </div>
                         )}
-                        <div className="text-[14px] ml-0.5" title={post.flag}>
-                          {getFlagEmoji(post.flag)}
-                        </div>
+                        <CountryFlag flag={post.flag} size={14} className="ml-0.5" />
                         {post.role === "admin" && (
                           <span className="bg-[#1A1A2E] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-[4px] uppercase tracking-wider border border-white/10 shadow-sm ml-0.5">
                             Admin
@@ -341,9 +354,9 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                     "px-3 py-1 rounded-full text-[11px] font-medium shrink-0 uppercase",
                     post.tag === "buy" && "bg-[#D1FAE5] text-[#065F46]",
                     post.tag === "sell" && "bg-[#FEF3C7] text-[#92400E]",
-                    (post.tag === "blank" || !post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
+                    isGeneralPostType(post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
                   )}>
-                    {post.tag === "blank" || !post.tag ? "General" : post.tag}
+                    {getPostTypeLabel(post.tag)}
                   </span>
                   
                   <DropdownMenu>
@@ -359,8 +372,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                       >
                         View Profile
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={(e) => { e.stopPropagation(); !isAuthenticated && dispatch(openAuthModal()); }}
+                      <DropdownMenuItem
+                        onClick={(e) => openReportDialog(e, post)}
                         className="cursor-pointer"
                       >
                         Report Post
@@ -385,6 +398,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
               <PostHashtags
                 postDescription={post.postDescription}
                 className="mb-3"
+                maxTags={4}
                 onTagClick={(e) => e.stopPropagation()}
               />
               <div className="pt-3 border-t border-[#F3F4F6] flex gap-2 mt-auto">
@@ -414,6 +428,11 @@ export function PostFeed({ activeTab }: PostFeedProps) {
         )}
       </div>
     </div>
+    <ReportPostDialog
+      open={reportOpen}
+      onOpenChange={setReportOpen}
+      target={reportTarget}
+    />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

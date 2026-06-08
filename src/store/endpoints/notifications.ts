@@ -28,6 +28,22 @@ export const notificationsApi = api.injectEndpoints({
         method: 'PUT',
       }),
       invalidatesTags: ['Notifications'],
+      async onQueryStarted(userId, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          notificationsApi.util.updateQueryData('getNotifications', userId, (draft) => {
+            draft.notifs.forEach((notif) => {
+              if (notif.type !== 'chat_request') {
+                notif.isRead = true;
+              }
+            });
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
     }),
   }),
   overrideExisting: false,

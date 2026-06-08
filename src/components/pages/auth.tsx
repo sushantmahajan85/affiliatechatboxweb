@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import bgImage from "../../../public/assets/authBG.jpg";
 import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
+import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+import { useGetProfessionalStatsQuery } from "@/store/endpoints/members";
 import { useGoogleLogin } from "@react-oauth/google";
 
 // SVG Icons for Google and LinkedIn
@@ -42,8 +44,18 @@ export function AuthPage() {
   
   const [googleLogin, { isLoading: isGoogleLoading }] = useGoogleLoginMutation();
   const [linkedinLogin, { isLoading: isLinkedinLoading }] = useLinkedinLoginMutation();
+  const { data: professionalStats } = useGetProfessionalStatsQuery(undefined, {
+    pollingInterval: 60_000,
+  });
   const isLoading = isGoogleLoading || isLinkedinLoading;
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const professionalCount = professionalStats?.total ?? 0;
+  const recentProfessionals = professionalStats?.recentUsers ?? [];
+  const formattedProfessionalCount =
+    professionalCount > 0
+      ? `${professionalCount.toLocaleString()}+`
+      : "12,000+";
 
   // Real Google Login Implementation
   const handleGoogleLogin = useGoogleLogin({
@@ -134,14 +146,37 @@ export function AuthPage() {
 
             <div className="flex flex-wrap gap-6 justify-center md:justify-start items-center">
               <div className="flex -space-x-4">
-                {[1,2,3,4,5].map(i => (
-                  <div key={i} className="w-12 h-12 rounded-full border-4 border-[#0A7EA4] overflow-hidden bg-white/20 backdrop-blur-md shadow-lg">
-                    <ImageWithFallback src={`https://i.pravatar.cc/100?u=${i+10}`} alt="User" />
-                  </div>
-                ))}
+                {recentProfessionals.length > 0
+                  ? recentProfessionals.slice(0, 5).map((user) => (
+                      <div
+                        key={user._id}
+                        className="w-12 h-12 rounded-full border-4 border-[#0A7EA4] overflow-hidden bg-white/20 backdrop-blur-md shadow-lg"
+                      >
+                        <ImageWithFallback
+                          src={resolveUserProfileImageUrl(
+                            user,
+                            `${user.firstName || "Professional"} ${user.lastName || ""}`.trim()
+                          )}
+                          alt="Professional"
+                        />
+                      </div>
+                    ))
+                  : [0, 1, 2, 3, 4].map((i) => (
+                      <div
+                        key={i}
+                        className="w-12 h-12 rounded-full border-4 border-[#0A7EA4] overflow-hidden bg-white/20 backdrop-blur-md shadow-lg"
+                      >
+                        <ImageWithFallback
+                          src={`https://i.pravatar.cc/100?u=${i + 10}`}
+                          alt="Professional"
+                        />
+                      </div>
+                    ))}
               </div>
               <div className="flex flex-col">
-                <p className="text-white text-base font-black">12,000+ Professionals</p>
+                <p className="text-white text-base font-black">
+                  {formattedProfessionalCount} Professionals
+                </p>
                 <p className="text-white/80 text-sm font-bold">Scaling their business today</p>
               </div>
             </div>

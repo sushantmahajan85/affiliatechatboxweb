@@ -53,7 +53,17 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
     skip: !isAuthenticated || !user?._id,
     pollingInterval: 30000, 
   });
-  const [markAllRead] = useMarkAllReadMutation();
+  const [markAllRead, { isLoading: isMarkingAllRead }] = useMarkAllReadMutation();
+
+  const handleMarkAllRead = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user?._id || isMarkingAllRead) return;
+    try {
+      await markAllRead(user._id).unwrap();
+    } catch {
+      // Refetch will restore state on failure via RTK undo
+    }
+  };
 
   const notifications = notificationsData?.notifs || [];
   
@@ -125,11 +135,13 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
                   <div className="p-4 border-b border-[#F0F0F0] flex items-center justify-between">
                     <h3 className="font-bold text-[#1A1A2E]">Notifications</h3>
                     {hasSystemUnread && (
-                      <button 
-                        onClick={() => markAllRead(user?._id || "")}
-                        className="text-xs text-[#7B61FF] font-medium hover:underline"
+                      <button
+                        type="button"
+                        onClick={handleMarkAllRead}
+                        disabled={isMarkingAllRead}
+                        className="text-xs text-[#7B61FF] font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Mark all read
+                        {isMarkingAllRead ? "Marking..." : "Mark all read"}
                       </button>
                     )}
                   </div>
