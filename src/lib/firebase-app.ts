@@ -113,6 +113,7 @@ export function getClientFirebaseAuth(): Auth | null {
 export function getFirestoreDb(): Firestore | null {
   const app = getFirebaseApp();
   if (!app) return null;
+  initFirebaseAppCheckOnClient();
   return getFirestore(app);
 }
 

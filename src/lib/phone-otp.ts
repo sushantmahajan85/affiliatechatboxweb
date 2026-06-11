@@ -28,12 +28,31 @@ export function isInvalidRecaptchaSiteKey(message: string): boolean {
   return message.includes("Invalid site key") || message.includes("6LdNGRQt");
 }
 
-export function recaptchaSiteKeyFixMessage(): string {
+export function isRecaptchaPhoneError(message: string): boolean {
+  const lower = message.toLowerCase();
   return (
-    "Phone reCAPTCHA failed. Try: (1) hard-refresh, (2) open http://127.0.0.1:3000 instead of localhost, " +
-    '(3) Google Cloud → reCAPTCHA → "Key for Identity Platform reCAPTCHA integration" (6LdNGRQt…) → ' +
-    "add localhost + 127.0.0.1, (4) Firebase Console → Authentication → Settings → reCAPTCHA → set Web key to " +
-    "None if App Check Enterprise is enabled, or (5) remove NEXT_PUBLIC_PHONE_OTP_PROVIDER=firebase to use server OTP locally."
+    isInvalidRecaptchaSiteKey(message) ||
+    lower.includes("recaptcha placeholder") ||
+    lower.includes("captcha-check-failed") ||
+    lower.includes("invalid-app-credential")
+  );
+}
+
+export function recaptchaSiteKeyFixMessage(): string {
+  const isLocal =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
+  if (isLocal) {
+    return (
+      "Phone reCAPTCHA failed on localhost. Use backend OTP (remove NEXT_PUBLIC_PHONE_OTP_PROVIDER=firebase) " +
+      "or add localhost to the 6LdNGRQt reCAPTCHA key in Google Cloud."
+    );
+  }
+
+  return (
+    "Firebase phone reCAPTCHA failed. In Firebase Console → Authentication → Settings → reCAPTCHA, " +
+    "set the Web key to None (App Check Enterprise cannot share keys with phone auth). Then hard-refresh."
   );
 }
 

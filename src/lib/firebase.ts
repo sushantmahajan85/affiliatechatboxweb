@@ -2,11 +2,13 @@
  * Firebase = SMS OTP only. Your app login stays on JWT (Redux/cookies).
  */
 import { getClientFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase-app";
-import { bootstrapFirebaseAuthRecaptcha } from "@/lib/firebase-auth-bootstrap";
-import { isInvalidRecaptchaSiteKey, recaptchaSiteKeyFixMessage } from "@/lib/phone-otp";
+import {
+  isInvalidRecaptchaSiteKey,
+  isRecaptchaPhoneError,
+  recaptchaSiteKeyFixMessage,
+} from "@/lib/phone-otp";
 import {
   type ConfirmationResult,
-  initializeRecaptchaConfig,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   signOut,
@@ -21,7 +23,7 @@ export { formatToE164 } from "@/lib/phone-otp";
 
 export function mapFirebaseAuthError(err: unknown): string {
   const e = err as { code?: string; message?: string };
-  if (e.message && isInvalidRecaptchaSiteKey(e.message)) {
+  if (e.message && isRecaptchaPhoneError(e.message)) {
     return recaptchaSiteKeyFixMessage();
   }
   const messages: Record<string, string> = {
@@ -59,8 +61,8 @@ export async function sendPhoneOtp(
     auth.settings.appVerificationDisabledForTesting = true;
   }
 
-  await bootstrapFirebaseAuthRecaptcha();
-  await initializeRecaptchaConfig(auth);
+  // Use reCAPTCHA v2 via RecaptchaVerifier — do not call initializeRecaptchaConfig here;
+  // it conflicts with App Check Enterprise on web (firebase-js-sdk#9405).
   resetVerifier();
 
   const host =

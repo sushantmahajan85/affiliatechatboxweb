@@ -20,7 +20,7 @@ import {
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   getPhoneOtpProvider,
-  isInvalidRecaptchaSiteKey,
+  isRecaptchaPhoneError,
   isValidE164,
   recaptchaSiteKeyFixMessage,
   sendServerPhoneOtp,
@@ -120,7 +120,7 @@ export function PhoneVerification({
   useEffect(() => {
     if (!useServerOtp) ensureRecaptchaHost();
     const onWindowError = (event: ErrorEvent): void => {
-      if (isInvalidRecaptchaSiteKey(event.message || "")) {
+      if (isRecaptchaPhoneError(event.message || "")) {
         setRecaptchaError(recaptchaSiteKeyFixMessage());
       }
     };
@@ -174,8 +174,37 @@ export function PhoneVerification({
       setResendSeconds(RESEND_COOLDOWN_SECONDS);
       toast.success("Verification code sent");
     } catch (err) {
-      const message = mapFirebaseAuthError(err);
-      if (isInvalidRecaptchaSiteKey(message)) setRecaptchaError(message);
+      const rawMessage = err instanceof Error ? err.message : mapFirebaseAuthError(err);
+      const message = isRecaptchaPhoneError(rawMessage)
+        ? recaptchaSiteKeyFixMessage()
+        : mapFirebaseAuthError(err);
+
+      if (!useServerOtp && isRecaptchaPhoneError(rawMessage) && appJwt) {
+        try {
+          const result = await sendServerPhoneOtp(e164, appJwt);
+          setUseServerOtp(true);
+          setPhoneE164(e164);
+          setStep("otp");
+          setResendSeconds(RESEND_COOLDOWN_SECONDS);
+          setRecaptchaError(null);
+          setErrorMessage(null);
+          if (result.devCode) setDevCodeHint(result.devCode);
+          toast.success(
+            result.smsSent
+              ? "Firebase reCAPTCHA unavailable — code sent via SMS"
+              : "Firebase reCAPTCHA unavailable — using backup OTP"
+          );
+          return;
+        } catch (fallbackErr) {
+          const fallbackMessage =
+            fallbackErr instanceof Error ? fallbackErr.message : "Backup OTP failed";
+          setErrorMessage(`${message} Backup OTP also failed: ${fallbackMessage}`);
+          toast.error(fallbackMessage);
+          return;
+        }
+      }
+
+      if (isRecaptchaPhoneError(message)) setRecaptchaError(message);
       setErrorMessage(message);
       toast.error(message);
     } finally {
