@@ -16,6 +16,15 @@ export function isLocalFirebaseHost(): boolean {
   return host === "localhost" || host === "127.0.0.1";
 }
 
+export function recaptchaDomainHint(): string {
+  const host =
+    typeof window !== "undefined" ? window.location.hostname : "your domain";
+  return (
+    `Add "${host}" to Google Cloud → Security → reCAPTCHA → ` +
+    '"Key for Identity Platform reCAPTCHA integration" → Domains, then wait a few minutes and refresh.'
+  );
+}
+
 export function recaptchaLocalhostHint(): string {
   return (
     "On localhost, add localhost and 127.0.0.1 to Google Cloud → Security → reCAPTCHA → " +
@@ -79,10 +88,12 @@ export function mapFirebaseAuthError(err: unknown): string {
 
   const message = e.message || "";
   if (/invalid site key/i.test(message) || /6Ld[A-Za-z0-9_-]+/.test(message)) {
-    return `reCAPTCHA site key is not allowed on this domain. ${recaptchaLocalhostHint()}`;
+    const hint = isLocalFirebaseHost() ? recaptchaLocalhostHint() : recaptchaDomainHint();
+    return `reCAPTCHA site key is not allowed on this domain. ${hint}`;
   }
-  if (/timed out/i.test(message) && isLocalFirebaseHost()) {
-    return `${message} ${recaptchaLocalhostHint()}`;
+  if (/timed out/i.test(message) || /failed to load/i.test(message)) {
+    const hint = isLocalFirebaseHost() ? recaptchaLocalhostHint() : recaptchaDomainHint();
+    return `${message} ${hint}`;
   }
 
   return message || "Something went wrong.";

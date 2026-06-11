@@ -5,7 +5,7 @@ import {
   isPhoneAuthTestMode,
 } from "@/lib/firebase";
 
-const RECAPTCHA_CONFIG_TIMEOUT_MS = 8_000;
+const RECAPTCHA_CONFIG_TIMEOUT_MS = 15_000;
 
 let recaptchaConfigPromise: Promise<void> | null = null;
 

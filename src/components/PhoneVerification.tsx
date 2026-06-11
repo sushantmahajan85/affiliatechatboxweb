@@ -9,7 +9,7 @@ import {
   recaptchaLocalhostHint,
   RECAPTCHA_CONTAINER_ID,
 } from "@/lib/firebase";
-import { ensureRecaptchaConfig } from "@/lib/firebase-phone-recaptcha";
+import { ensureRecaptchaConfig, resetRecaptchaConfigCache } from "@/lib/firebase-phone-recaptcha";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   type ConfirmationResult,
@@ -17,7 +17,7 @@ import {
   signInWithPhoneNumber,
   signOut,
 } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type PhoneVerificationProps = {
   appJwt: string;
@@ -32,8 +32,8 @@ declare global {
   }
 }
 
-const RENDER_TIMEOUT_MS = 20_000;
-const SMS_TIMEOUT_MS = 30_000;
+const RENDER_TIMEOUT_MS = 25_000;
+const SMS_TIMEOUT_MS = 45_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -62,40 +62,6 @@ function clearRecaptcha(): void {
   document.getElementById(RECAPTCHA_CONTAINER_ID)?.replaceChildren();
 }
 
-async function createRecaptchaVerifier(): Promise<RecaptchaVerifier> {
-  clearRecaptcha();
-
-  const container = document.getElementById(RECAPTCHA_CONTAINER_ID);
-  if (!container) {
-    throw new Error("reCAPTCHA container missing. Refresh the page and try again.");
-  }
-
-  const firebaseAuth = getFirebaseAuth();
-  applyPhoneAuthTestSettings(firebaseAuth);
-
-  await ensureRecaptchaConfig();
-
-  const testMode = isPhoneAuthTestMode();
-  const verifier = new RecaptchaVerifier(firebaseAuth, container, {
-    size: testMode ? "invisible" : "normal",
-    callback: () => {
-      /* solved */
-    },
-    "expired-callback": () => {
-      clearRecaptcha();
-    },
-  });
-
-  await withTimeout(
-    verifier.render(),
-    RENDER_TIMEOUT_MS,
-    "reCAPTCHA timed out. Disable ad blockers, allow google.com/recaptcha, and try again."
-  );
-
-  window.recaptchaVerifier = verifier;
-  return verifier;
-}
-
 export function PhoneVerification({
   appJwt,
   disabled = false,
@@ -110,13 +76,88 @@ export function PhoneVerification({
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const [recaptchaLoading, setRecaptchaLoading] = useState(false);
+  const [recaptchaReady, setRecaptchaReady] = useState(false);
+  const [recaptchaSolved, setRecaptchaSolved] = useState(false);
+
+  const mountIdRef = useRef(0);
   const testMode = isPhoneAuthTestMode();
 
+  const mountRecaptcha = useCallback(async (): Promise<RecaptchaVerifier> => {
+    const mountId = ++mountIdRef.current;
+    clearRecaptcha();
+    setRecaptchaReady(false);
+    setRecaptchaSolved(false);
+    setRecaptchaLoading(true);
+
+    const container = document.getElementById(RECAPTCHA_CONTAINER_ID);
+    if (!container) {
+      setRecaptchaLoading(false);
+      throw new Error("reCAPTCHA container missing. Refresh the page and try again.");
+    }
+
+    const firebaseAuth = getFirebaseAuth();
+    applyPhoneAuthTestSettings(firebaseAuth);
+
+    if (!testMode) {
+      await ensureRecaptchaConfig();
+    }
+
+    const verifier = new RecaptchaVerifier(firebaseAuth, container, {
+      size: testMode ? "invisible" : "normal",
+      callback: () => {
+        if (mountIdRef.current === mountId) {
+          setRecaptchaSolved(true);
+        }
+      },
+      "expired-callback": () => {
+        if (mountIdRef.current === mountId) {
+          setRecaptchaSolved(false);
+          void mountRecaptcha().catch((err: unknown) => {
+            console.error("reCAPTCHA remount after expiry:", err);
+          });
+        }
+      },
+    });
+
+    await withTimeout(
+      verifier.render(),
+      RENDER_TIMEOUT_MS,
+      "reCAPTCHA failed to load. Disable ad blockers and refresh the page."
+    );
+
+    if (mountIdRef.current !== mountId) {
+      try {
+        verifier.clear();
+      } catch {
+        /* ignore stale mount */
+      }
+      throw new Error("reCAPTCHA setup was interrupted. Try again.");
+    }
+
+    window.recaptchaVerifier = verifier;
+    setRecaptchaReady(true);
+    setRecaptchaLoading(false);
+    return verifier;
+  }, [testMode]);
+
   useEffect(() => {
+    if (testMode || confirmationResult) return;
+
+    void mountRecaptcha().catch((err: unknown) => {
+      console.error("reCAPTCHA mount error:", err);
+      setError(mapFirebaseAuthError(err));
+      setRecaptchaLoading(false);
+    });
+
     return () => {
+      mountIdRef.current += 1;
       clearRecaptcha();
+      setRecaptchaReady(false);
+      setRecaptchaSolved(false);
+      setRecaptchaLoading(false);
     };
-  }, []);
+  }, [testMode, confirmationResult, mountRecaptcha]);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,21 +178,31 @@ export function PhoneVerification({
     }
 
     try {
-      const appVerifier = await createRecaptchaVerifier();
-      const firebaseAuth = getFirebaseAuth();
+      let appVerifier = window.recaptchaVerifier ?? null;
 
-      if (!testMode) {
+      if (testMode) {
+        appVerifier = await mountRecaptcha();
         await withTimeout(
           appVerifier.verify(),
           RENDER_TIMEOUT_MS,
-          "reCAPTCHA verification timed out. Tick the checkbox above and try again."
+          "reCAPTCHA verification timed out."
         );
+      } else {
+        if (!appVerifier || !recaptchaReady) {
+          appVerifier = await mountRecaptcha();
+        }
+        if (!recaptchaSolved) {
+          setError("Please tick the \"I'm not a robot\" box above, then click Verify Now.");
+          setLoading(false);
+          return;
+        }
       }
 
+      const firebaseAuth = getFirebaseAuth();
       const confirmation = await withTimeout(
         signInWithPhoneNumber(firebaseAuth, phoneNumber.trim(), appVerifier),
         SMS_TIMEOUT_MS,
-        "SMS request timed out. Tick the reCAPTCHA checkbox, then try again."
+        "SMS request timed out. Tick reCAPTCHA again and retry."
       );
 
       setConfirmationResult(confirmation);
@@ -159,7 +210,14 @@ export function PhoneVerification({
     } catch (err) {
       console.error("Error sending OTP:", err);
       setError(mapFirebaseAuthError(err));
-      clearRecaptcha();
+      resetRecaptchaConfigCache();
+      if (!testMode) {
+        void mountRecaptcha().catch((remountErr: unknown) => {
+          console.error("reCAPTCHA remount after error:", remountErr);
+        });
+      } else {
+        clearRecaptcha();
+      }
     } finally {
       setLoading(false);
     }
@@ -225,7 +283,10 @@ export function PhoneVerification({
     setError("");
     setSuccess("");
     setConfirmationResult(null);
-    clearRecaptcha();
+    resetRecaptchaConfigCache();
+    void mountRecaptcha().catch((err: unknown) => {
+      console.error("reCAPTCHA remount after change number:", err);
+    });
   };
 
   return (
@@ -244,7 +305,7 @@ export function PhoneVerification({
         ) : !confirmationResult ? (
           <>
             <p className="mt-1 text-xs text-[#64748B]">
-              Complete the &quot;I&apos;m not a robot&quot; check below, then click Verify Now.
+              Tick &quot;I&apos;m not a robot&quot; below, then click Verify Now.
             </p>
             {isLocalFirebaseHost() ? (
               <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
@@ -291,15 +352,31 @@ export function PhoneVerification({
             />
           </div>
 
-          <div
-            id={RECAPTCHA_CONTAINER_ID}
-            className={testMode ? "hidden" : "flex min-h-[78px] justify-center"}
-            aria-hidden={testMode}
-          />
+          {!testMode ? (
+            <div className="space-y-2">
+              <div
+                id={RECAPTCHA_CONTAINER_ID}
+                className="flex min-h-[78px] items-center justify-center rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] p-2"
+              />
+              {recaptchaLoading ? (
+                <p className="text-center text-xs text-[#64748B]">Loading security check…</p>
+              ) : recaptchaSolved ? (
+                <p className="text-center text-xs text-emerald-600">Security check complete ✓</p>
+              ) : recaptchaReady ? (
+                <p className="text-center text-xs text-[#64748B]">
+                  Tick the box above before clicking Verify Now.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <button
             type="submit"
-            disabled={loading || disabled}
+            disabled={
+              loading ||
+              disabled ||
+              (!testMode && (recaptchaLoading || !recaptchaReady))
+            }
             className="w-full rounded-xl bg-[#0A7EA4] px-4 py-3 font-medium text-white shadow-md transition hover:bg-[#086a8a] focus:outline-none focus:ring-2 focus:ring-[#0A7EA4]/50 disabled:opacity-50"
           >
             {loading ? (
@@ -319,7 +396,7 @@ export function PhoneVerification({
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                Processing request...
+                Sending code…
               </span>
             ) : (
               "Verify Now"
