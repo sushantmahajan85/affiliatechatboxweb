@@ -49,24 +49,6 @@ export const authApi = api.injectEndpoints({
       }),
       invalidatesTags: ['User'],
     }),
-    verifyPhoneOtp: builder.mutation<
-      any,
-      { mobileNumber: string; userOTP: string }
-    >({
-      query: (body) => ({
-        url: "/api/auth/verify_otp",
-        method: "POST",
-        body,
-      }),
-      invalidatesTags: ["User"],
-    }),
-    sendPhoneOtp: builder.mutation<any, { mobileNumber: string }>({
-      query: (body) => ({
-        url: "/api/auth/send-phone-otp",
-        method: "POST",
-        body,
-      }),
-    }),
     firebasePhoneVerify: builder.mutation<any, { firebaseIdToken: string }>({
       query: (body) => ({
         url: "/api/auth/firebase-phone-verify",
@@ -96,8 +78,6 @@ export const {
   useMobileContactMutation,
   useVerifyUserMutation,
   useGoogleVerifyMutation,
-  useSendPhoneOtpMutation,
-  useVerifyPhoneOtpMutation,
   useFirebasePhoneVerifyMutation,
   useRegisterUserMutation,
   useGetProfileQuery,

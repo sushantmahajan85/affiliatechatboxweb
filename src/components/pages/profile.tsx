@@ -6,8 +6,6 @@ import {
   useRegisterUserMutation,
   useGoogleVerifyMutation,
 } from "@/store/endpoints/auth";
-import { isFirebaseConfigured } from "@/lib/firebase-app";
-import { PhoneVerificationDialog } from "@/components/PhoneVerification";
 import { setCredentials, updateUser } from "@/store/authSlice";
 import { useUpdateMobilePrivacyMutation } from "@/store/endpoints/members";
 import { Switch } from "@/components/ui/switch";
@@ -54,14 +52,9 @@ import {
   countryLabelFromFlag,
   normalizeCountryCode,
 } from "@/lib/country-flag";
-import {
-  DEFAULT_COUNTRY_ISO,
-  DEFAULT_PHONE_DIAL,
-  PHONE_COUNTRIES,
-  countryOptionsForIso,
-  dialToIso,
-  splitStoredMobileForCountryInputs,
-} from "@/lib/phone-countries";
+import { PhoneVerification } from "@/components/PhoneVerification";
+import { isFirebaseConfigured } from "@/lib/firebase-app";
+import { DEFAULT_COUNTRY_ISO, countryOptionsForIso } from "@/lib/phone-countries";
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
@@ -132,27 +125,6 @@ export function ProfilePage({ id }: { id?: string }) {
 
   const [updateProfile, { isLoading: isUpdating }] = useRegisterUserMutation();
   const [googleVerifyMutate, { isLoading: isGoogleVerifying }] = useGoogleVerifyMutation();
-  const [mobileVerifyOpen, setMobileVerifyOpen] = useState(false);
-  const [phoneVerifyInitial, setPhoneVerifyInitial] = useState({
-    dial: DEFAULT_PHONE_DIAL,
-    national: "",
-  });
-
-  const openMobileVerifyDialog = (): void => {
-    if (!isFirebaseConfigured()) {
-      toast.error("Firebase not configured in .env.local");
-      return;
-    }
-    if (!appJwt) {
-      toast.error("Log in first.");
-      return;
-    }
-    const u = data?.user;
-    const raw = u?.mobileNumber ? String(u.mobileNumber).replace(/\D/g, "") : "";
-    const { dial, national } = splitStoredMobileForCountryInputs(raw, DEFAULT_PHONE_DIAL);
-    setPhoneVerifyInitial({ dial, national });
-    setMobileVerifyOpen(true);
-  };
 
   const promptGoogleVerification = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
@@ -362,7 +334,6 @@ export function ProfilePage({ id }: { id?: string }) {
   const canVerifyFromHere = isOwnProfile && Boolean(currentUserId);
   const googleRowActive = canVerifyFromHere && !profile.googleVerified;
   const linkedinRowActive = canVerifyFromHere && !profile.linkedinVerified;
-  const mobileRowActive = canVerifyFromHere && !profile.otpVerified;
 
   const googlePill = profile.googleVerified
     ? { text: "VERIFIED", cls: "bg-green-100 text-green-700" }
@@ -374,12 +345,6 @@ export function ProfilePage({ id }: { id?: string }) {
     ? { text: "VERIFIED", cls: "bg-green-100 text-green-700" }
     : canVerifyFromHere
       ? { text: "VERIFY NOW", cls: "bg-blue-600 text-white" }
-      : { text: "NOT VERIFIED", cls: "bg-[#F1F5F9] text-[#64748B]" };
-
-  const mobilePill = profile.otpVerified
-    ? { text: "VERIFIED", cls: "bg-green-100 text-green-700" }
-    : canVerifyFromHere
-      ? { text: "VERIFY", cls: "bg-[#F1F5F9] text-[#64748B]" }
       : { text: "NOT VERIFIED", cls: "bg-[#F1F5F9] text-[#64748B]" };
 
   if (isLoading) {
@@ -892,69 +857,66 @@ export function ProfilePage({ id }: { id?: string }) {
             </div>
 
             {/* Mobile / contact verification */}
-            <div
-              role={mobileRowActive ? "button" : undefined}
-              tabIndex={mobileRowActive ? 0 : undefined}
-              onClick={() => {
-                if (!mobileRowActive) return;
-                openMobileVerifyDialog();
-              }}
-              onKeyDown={(e) => {
-                if (!mobileRowActive) return;
-                if (e.key !== "Enter" && e.key !== " ") return;
-                e.preventDefault();
-                openMobileVerifyDialog();
-              }}
-              className={`p-5 flex items-center justify-between transition-colors group ${
-                mobileRowActive ? "cursor-pointer hover:bg-[#F8FAFC]" : "cursor-default"
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-                  <FiShield className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[#1A1A1A]">Mobile Verification</span>
-                    {profile.otpVerified ? <FiCheckCircle className="w-4 h-4 text-green-500" /> : <FiAlertCircle className="w-4 h-4 text-amber-500" />}
+            <div className="p-5 transition-colors">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
+                    <FiShield className="w-6 h-6 text-purple-600" />
                   </div>
-                  <p className="text-[13px] text-[#64748B]">
-                    {canVerifyFromHere && !profile.otpVerified
-                      ? "Add your number and verify with a code we send by SMS."
-                      : "Secure access via verified phone"}
-                  </p>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-[#1A1A1A]">Mobile Verification</span>
+                      {profile.otpVerified ? (
+                        <FiCheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <FiAlertCircle className="w-4 h-4 text-amber-500" />
+                      )}
+                    </div>
+                    <p className="text-[13px] text-[#64748B]">
+                      {profile.otpVerified
+                        ? "Secure access via verified phone"
+                        : "Add your number and verify with a code we send by SMS"}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span
+                    className={`text-[12px] font-bold px-3 py-1 rounded-full ${
+                      profile.otpVerified ? "bg-green-100 text-green-700" : "bg-[#F1F5F9] text-[#64748B]"
+                    }`}
+                  >
+                    {profile.otpVerified ? "VERIFIED" : "VERIFY"}
+                  </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-[12px] font-bold px-3 py-1 rounded-full ${mobilePill.cls}`}>
-                  {mobilePill.text}
-                </span>
-                {mobileRowActive ? (
-                  <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" aria-hidden />
-                ) : null}
-              </div>
+
+              {isOwnProfile && !profile.otpVerified && isFirebaseConfigured() && appJwt ? (
+                <PhoneVerification
+                  appJwt={appJwt}
+                  onVerified={(phoneE164) => {
+                    setProfile((prev) => ({
+                      ...prev,
+                      otpVerified: true,
+                      phone: phoneE164.replace(/\D/g, "") || phoneE164,
+                    }));
+                    toast.success("Phone number verified.");
+                  }}
+                  onSuccess={(user) => {
+                    dispatch(setCredentials({ user: user as any, token: user.jwttoken }));
+                    refetch();
+                  }}
+                />
+              ) : null}
+
+              {isOwnProfile && !profile.otpVerified && !isFirebaseConfigured() ? (
+                <p className="mt-4 text-xs text-amber-700 border-t border-[#F1F5F9] pt-4">
+                  Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* keys to .env.local.
+                </p>
+              ) : null}
             </div>
           </div>
         </div>
     </div>
-    <PhoneVerificationDialog
-      open={mobileVerifyOpen}
-      onOpenChange={setMobileVerifyOpen}
-      appJwt={appJwt ?? ""}
-      initialCountryDial={phoneVerifyInitial.dial}
-      initialNationalNumber={phoneVerifyInitial.national}
-      onVerified={(phoneNumber) => {
-        setProfile((prev) => ({
-          ...prev,
-          otpVerified: true,
-          phone: phoneNumber.replace(/\D/g, "") || phoneNumber,
-        }));
-      }}
-      onSuccess={(user) => {
-        dispatch(setCredentials({ user: user as any, token: user.jwttoken }));
-        refetch();
-      }}
-    />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

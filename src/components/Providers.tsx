@@ -1,6 +1,5 @@
 "use client";
 
-import "@/lib/firebase-app-check-bootstrap";
 import { Provider } from "react-redux";
 import { store } from "@/store/store";
 import { AuthWrapper } from "./AuthWrapper";

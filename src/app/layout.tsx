@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Providers } from '@/components/Providers';
-import { RecaptchaHost } from '@/components/RecaptchaHost';
 import { Toaster } from 'sonner';
 import NextTopLoader from 'nextjs-toploader';
 import './globals.css';
@@ -18,7 +17,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="antialiased">
-        <RecaptchaHost />
         <NextTopLoader color="#0A7EA4" showSpinner={false} />
         <Providers>
           {children}

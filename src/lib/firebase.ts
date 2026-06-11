@@ -1,106 +1,89 @@
-/**
- * Firebase = SMS OTP only. Your app login stays on JWT (Redux/cookies).
- */
+import type { Auth } from "firebase/auth";
 import { getClientFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase-app";
-import {
-  isInvalidRecaptchaSiteKey,
-  isRecaptchaPhoneError,
-  recaptchaSiteKeyFixMessage,
-} from "@/lib/phone-otp";
-import {
-  type ConfirmationResult,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
-  signOut,
-} from "firebase/auth";
+
+export { isFirebaseConfigured };
 
 export const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
 
-let verifier: InstanceType<typeof RecaptchaVerifier> | null = null;
+/** Only true when NEXT_PUBLIC_FIREBASE_PHONE_TEST_MODE=true — must be off for real SMS. */
+export function isPhoneAuthTestMode(): boolean {
+  return process.env.NEXT_PUBLIC_FIREBASE_PHONE_TEST_MODE === "true";
+}
 
-export { isFirebaseConfigured };
-export { formatToE164 } from "@/lib/phone-otp";
+export function isLocalFirebaseHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+export function recaptchaLocalhostHint(): string {
+  return (
+    "On localhost, add localhost and 127.0.0.1 to Google Cloud → Security → reCAPTCHA → " +
+    '"Key for Identity Platform reCAPTCHA integration" → Domains. ' +
+    "Or test real SMS on your live site (affiliatechatbox.com)."
+  );
+}
+
+export function applyPhoneAuthTestSettings(authInstance: Auth): void {
+  authInstance.settings.appVerificationDisabledForTesting = isPhoneAuthTestMode();
+}
+
+let authInstance: Auth | null = null;
+
+function resolveAuth(): Auth {
+  if (typeof window === "undefined") {
+    throw new Error("Firebase Auth is only available in the browser.");
+  }
+  if (!authInstance) {
+    const instance = getClientFirebaseAuth();
+    if (!instance) {
+      throw new Error("Firebase not configured. Set NEXT_PUBLIC_FIREBASE_* in .env.local.");
+    }
+    authInstance = instance;
+  }
+  return authInstance;
+}
+
+/** Real Auth instance — use this with RecaptchaVerifier / signInWithPhoneNumber. */
+export function getFirebaseAuth(): Auth {
+  return resolveAuth();
+}
+
+/** Same usage as standard Firebase samples: `import { auth } from '@/lib/firebase'` */
+export const auth = new Proxy({} as Auth, {
+  get(_target, prop) {
+    const instance = resolveAuth();
+    const value = Reflect.get(instance, prop, instance);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
 
 export function mapFirebaseAuthError(err: unknown): string {
   const e = err as { code?: string; message?: string };
-  if (e.message && isRecaptchaPhoneError(e.message)) {
-    return recaptchaSiteKeyFixMessage();
-  }
   const messages: Record<string, string> = {
-    "auth/invalid-phone-number": "Invalid phone number.",
+    "auth/invalid-phone-number": "Invalid phone number. Include country code (e.g. +880…).",
     "auth/too-many-requests": "Too many attempts. Try again later.",
     "auth/quota-exceeded": "SMS limit reached. Try again later.",
-    "auth/invalid-verification-code": "Wrong code.",
-    "auth/code-expired": "Code expired. Send again.",
-    "auth/captcha-check-failed": "Complete Google's security check and try again.",
-    "auth/unauthorized-domain": "Add this domain in Firebase Console → Authentication → Authorized domains.",
+    "auth/invalid-verification-code": "Invalid or expired OTP code. Please try again.",
+    "auth/code-expired": "Code expired. Send a new one.",
+    "auth/captcha-check-failed":
+      "reCAPTCHA verification failed. Set NEXT_PUBLIC_FIREBASE_PHONE_TEST_MODE=false for real SMS, disable ad blockers, and hard-refresh.",
+    "auth/invalid-app-credential":
+      "reCAPTCHA token invalid. Ensure reCAPTCHA Enterprise is configured in Firebase Console → Authentication → Settings → reCAPTCHA.",
+    "auth/unauthorized-domain": "This domain is not authorized in Firebase Console.",
+    "auth/network-request-failed": "Network error. Check your connection and try again.",
+    "auth/internal-error":
+      "reCAPTCHA failed to load. In Firebase Console → Authentication → Settings → Authorized domains, add localhost. Disable ad blockers and hard-refresh.",
   };
   if (e.code && messages[e.code]) return messages[e.code];
-  return e.message || "Something went wrong.";
-}
 
-function resetVerifier(): void {
-  try {
-    verifier?.clear();
-  } catch {
-    /* ignore */
+  const message = e.message || "";
+  if (/invalid site key/i.test(message) || /6Ld[A-Za-z0-9_-]+/.test(message)) {
+    return `reCAPTCHA site key is not allowed on this domain. ${recaptchaLocalhostHint()}`;
   }
-  verifier = null;
-  document.getElementById(RECAPTCHA_CONTAINER_ID)?.replaceChildren();
-}
-
-/** Step 1: Firebase sends SMS (reCAPTCHA required by Google on web). */
-export async function sendPhoneOtp(
-  e164: string,
-  container: HTMLElement
-): Promise<ConfirmationResult> {
-  const auth = getClientFirebaseAuth();
-  if (!auth) throw new Error("Firebase not configured");
-
-  if (process.env.NEXT_PUBLIC_FIREBASE_PHONE_TEST_MODE === "true") {
-    auth.settings.appVerificationDisabledForTesting = true;
+  if (/timed out/i.test(message) && isLocalFirebaseHost()) {
+    return `${message} ${recaptchaLocalhostHint()}`;
   }
 
-  // Use reCAPTCHA v2 via RecaptchaVerifier — do not call initializeRecaptchaConfig here;
-  // it conflicts with App Check Enterprise on web (firebase-js-sdk#9405).
-  resetVerifier();
-
-  const host =
-    container.id === RECAPTCHA_CONTAINER_ID
-      ? container
-      : (document.getElementById(RECAPTCHA_CONTAINER_ID) ?? container);
-  if (!host.isConnected) {
-    throw new Error("reCAPTCHA container is not in the document.");
-  }
-
-  verifier = new RecaptchaVerifier(auth, host, { size: "invisible" });
-  await verifier.render();
-
-  try {
-    return await signInWithPhoneNumber(auth, e164, verifier);
-  } catch (err) {
-    resetVerifier();
-    throw err;
-  }
-}
-
-/** Step 2: Confirm OTP, then sign out Firebase immediately. */
-export async function confirmPhoneOtp(
-  confirmationResult: ConfirmationResult,
-  code: string
-): Promise<{ phoneE164: string; firebaseIdToken: string }> {
-  const auth = getClientFirebaseAuth();
-  if (!auth) throw new Error("Firebase not configured");
-
-  await confirmationResult.confirm(code);
-
-  const user = auth.currentUser;
-  if (!user?.phoneNumber) throw new Error("Verification failed");
-
-  const result = { phoneE164: user.phoneNumber, firebaseIdToken: await user.getIdToken() };
-
-  await signOut(auth);
-  resetVerifier();
-
-  return result;
+  return message || "Something went wrong.";
 }
