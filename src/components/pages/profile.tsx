@@ -943,6 +943,13 @@ export function ProfilePage({ id }: { id?: string }) {
       appJwt={appJwt ?? ""}
       initialCountryDial={phoneVerifyInitial.dial}
       initialNationalNumber={phoneVerifyInitial.national}
+      onVerified={(phoneNumber) => {
+        setProfile((prev) => ({
+          ...prev,
+          otpVerified: true,
+          phone: phoneNumber.replace(/\D/g, "") || phoneNumber,
+        }));
+      }}
       onSuccess={(user) => {
         dispatch(setCredentials({ user: user as any, token: user.jwttoken }));
         refetch();

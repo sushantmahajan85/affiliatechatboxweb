@@ -27,8 +27,26 @@ export function isFirebaseAppCheckConfigured(): boolean {
   return envReady(process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY);
 }
 
+function shouldSkipAppCheckForPhoneAuth(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  if (host !== "localhost" && host !== "127.0.0.1") return false;
+  return process.env.NODE_ENV === "development";
+}
+
 function initFirebaseAppCheck(app: FirebaseApp): void {
   if (typeof window === "undefined" || appCheckInitialized) return;
+
+  // App Check Enterprise + Phone Auth reCAPTCHA conflict on local dev (firebase-js-sdk#9405).
+  if (shouldSkipAppCheckForPhoneAuth()) {
+    if (process.env.NODE_ENV === "development") {
+      console.info(
+        "[App Check] Skipped on localhost so Firebase Phone Auth reCAPTCHA can load. " +
+          "App Check still runs in production."
+      );
+    }
+    return;
+  }
 
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_ENTERPRISE_SITE_KEY?.trim();
   if (!siteKey) {

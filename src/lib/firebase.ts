@@ -4,15 +4,14 @@
 import { getClientFirebaseAuth, isFirebaseConfigured } from "@/lib/firebase-app";
 import { isInvalidRecaptchaSiteKey, recaptchaSiteKeyFixMessage } from "@/lib/phone-otp";
 import {
+  type ConfirmationResult,
   initializeRecaptchaConfig,
-  PhoneAuthProvider,
   RecaptchaVerifier,
-  signInWithCredential,
   signInWithPhoneNumber,
   signOut,
 } from "firebase/auth";
 
-export const RECAPTCHA_CONTAINER_ID = "firebase-phone-recaptcha";
+export const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
 
 let verifier: InstanceType<typeof RecaptchaVerifier> | null = null;
 
@@ -48,7 +47,10 @@ function resetVerifier(): void {
 }
 
 /** Step 1: Firebase sends SMS (reCAPTCHA required by Google on web). */
-export async function sendPhoneOtp(e164: string, container: HTMLElement): Promise<string> {
+export async function sendPhoneOtp(
+  e164: string,
+  container: HTMLElement
+): Promise<ConfirmationResult> {
   const auth = getClientFirebaseAuth();
   if (!auth) throw new Error("Firebase not configured");
 
@@ -63,8 +65,7 @@ export async function sendPhoneOtp(e164: string, container: HTMLElement): Promis
   await verifier.render();
 
   try {
-    const result = await signInWithPhoneNumber(auth, e164, verifier);
-    return result.verificationId;
+    return await signInWithPhoneNumber(auth, e164, verifier);
   } catch (err) {
     resetVerifier();
     throw err;
@@ -73,13 +74,13 @@ export async function sendPhoneOtp(e164: string, container: HTMLElement): Promis
 
 /** Step 2: Confirm OTP, then sign out Firebase immediately. */
 export async function confirmPhoneOtp(
-  verificationId: string,
+  confirmationResult: ConfirmationResult,
   code: string
 ): Promise<{ phoneE164: string; firebaseIdToken: string }> {
   const auth = getClientFirebaseAuth();
   if (!auth) throw new Error("Firebase not configured");
 
-  await signInWithCredential(auth, PhoneAuthProvider.credential(verificationId, code));
+  await confirmationResult.confirm(code);
 
   const user = auth.currentUser;
   if (!user?.phoneNumber) throw new Error("Verification failed");

@@ -21,18 +21,23 @@ import { getApiBaseUrl } from "@/lib/api-base-url";
 import {
   getPhoneOtpProvider,
   isInvalidRecaptchaSiteKey,
+  isValidE164,
   recaptchaSiteKeyFixMessage,
   sendServerPhoneOtp,
   verifyServerPhoneOtp,
 } from "@/lib/phone-otp";
 import { DEFAULT_PHONE_DIAL, PHONE_COUNTRIES } from "@/lib/phone-countries";
+import type { ConfirmationResult } from "firebase/auth";
 import { useEffect, useRef, useState } from "react";
 import { FiLoader, FiShield, FiSmartphone } from "react-icons/fi";
 import { toast } from "sonner";
 
+const RESEND_COOLDOWN_SECONDS = 60;
+
 type PhoneVerificationProps = {
   appJwt: string;
   onSuccess: (user: { jwttoken: string } & Record<string, unknown>) => void;
+  onVerified?: (phoneNumber: string) => void;
   initialCountryDial?: string;
   initialNationalNumber?: string;
 };
@@ -87,6 +92,7 @@ function StepIndicator({ step }: { step: "phone" | "otp" }) {
 export function PhoneVerification({
   appJwt,
   onSuccess,
+  onVerified,
   initialCountryDial = DEFAULT_PHONE_DIAL,
   initialNationalNumber = "",
 }: PhoneVerificationProps) {
@@ -94,13 +100,22 @@ export function PhoneVerification({
   const [countryDial, setCountryDial] = useState(initialCountryDial);
   const [nationalNumber, setNationalNumber] = useState(initialNationalNumber);
   const [otp, setOtp] = useState("");
-  const [verificationId, setVerificationId] = useState("");
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [phoneE164, setPhoneE164] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [useServerOtp, setUseServerOtp] = useState(() => getPhoneOtpProvider() === "server");
   const [recaptchaError, setRecaptchaError] = useState<string | null>(null);
   const [devCodeHint, setDevCodeHint] = useState<string | null>(null);
   const sendLockRef = useRef(false);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+    const timer = window.setTimeout(() => setResendSeconds((s) => s - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendSeconds]);
 
   useEffect(() => {
     if (!useServerOtp) ensureRecaptchaHost();
@@ -116,18 +131,23 @@ export function PhoneVerification({
     };
   }, [useServerOtp]);
 
-  const sendCode = async (): Promise<void> => {
-    if (loading || sendLockRef.current) return;
+  const sendCode = async (isResend = false): Promise<void> => {
+    if (loading || resendLoading || sendLockRef.current) return;
+    if (isResend && resendSeconds > 0) return;
 
     const e164 = formatToE164(countryDial, nationalNumber);
-    if (!e164) {
-      toast.error("Enter a valid phone number.");
+    if (!e164 || !isValidE164(e164)) {
+      const message = "Enter a valid phone number in international format (e.g. +8801XXXXXXXXX).";
+      setErrorMessage(message);
+      toast.error(message);
       return;
     }
 
     sendLockRef.current = true;
-    setLoading(true);
+    if (isResend) setResendLoading(true);
+    else setLoading(true);
     setRecaptchaError(null);
+    setErrorMessage(null);
     setDevCodeHint(null);
 
     try {
@@ -135,27 +155,33 @@ export function PhoneVerification({
         const result = await sendServerPhoneOtp(e164, appJwt);
         setPhoneE164(e164);
         setStep("otp");
+        setResendSeconds(RESEND_COOLDOWN_SECONDS);
         if (result.devCode) setDevCodeHint(result.devCode);
         toast.success(result.smsSent ? "Code sent by SMS" : "Dev code generated (see below)");
         return;
       }
 
       if (!isFirebaseConfigured()) {
-        toast.error("Firebase not configured in .env.local");
+        const message = "Firebase not configured in .env.local";
+        setErrorMessage(message);
+        toast.error(message);
         return;
       }
 
-      const id = await sendPhoneOtp(e164, ensureRecaptchaHost());
-      setVerificationId(id);
+      const result = await sendPhoneOtp(e164, ensureRecaptchaHost());
+      setConfirmationResult(result);
       setPhoneE164(e164);
       setStep("otp");
+      setResendSeconds(RESEND_COOLDOWN_SECONDS);
       toast.success("Verification code sent");
     } catch (err) {
       const message = mapFirebaseAuthError(err);
       if (isInvalidRecaptchaSiteKey(message)) setRecaptchaError(message);
+      setErrorMessage(message);
       toast.error(message);
     } finally {
       setLoading(false);
+      setResendLoading(false);
       sendLockRef.current = false;
     }
   };
@@ -164,50 +190,59 @@ export function PhoneVerification({
     if (loading) return;
     const code = otp.replace(/\D/g, "");
     if (!/^\d{6}$/.test(code)) {
-      toast.error("Enter the 6-digit code");
+      const message = "Enter the 6-digit code";
+      setErrorMessage(message);
+      toast.error(message);
       return;
     }
 
     setLoading(true);
+    setErrorMessage(null);
     try {
       if (useServerOtp) {
         const { user } = await verifyServerPhoneOtp(phoneE164, code, appJwt);
         toast.success("Mobile number verified");
+        onVerified?.(phoneE164);
         onSuccess(user);
         return;
       }
 
-      const payload = await confirmPhoneOtp(verificationId, code);
-      const base = getApiBaseUrl();
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${appJwt}`,
-      };
+      if (!confirmationResult) {
+        throw new Error("Send a verification code first.");
+      }
 
-      let res = await fetch(`${base}/api/auth/firebase-phone-verify`, {
+      const payload = await confirmPhoneOtp(confirmationResult, code);
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/firebase-phone-verify`, {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${appJwt}`,
+        },
         body: JSON.stringify({ firebaseIdToken: payload.firebaseIdToken }),
       });
-
-      if (!res.ok) {
-        res = await fetch(`${base}/api/auth/verify_User`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ mobileNumber: payload.phoneE164 }),
-        });
-      }
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message || "Could not save phone");
       }
 
-      const data = (await res.json()) as { user: { jwttoken: string } & Record<string, unknown> };
+      const data = (await res.json()) as {
+        success?: boolean;
+        phoneNumber?: string;
+        user?: { jwttoken: string } & Record<string, unknown>;
+      };
+
+      if (!data.user) {
+        throw new Error("Verification succeeded but user data was missing");
+      }
+
       toast.success("Mobile number verified");
+      onVerified?.(data.phoneNumber || payload.phoneE164);
       onSuccess(data.user);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : mapFirebaseAuthError(err));
+      const message = err instanceof Error ? err.message : mapFirebaseAuthError(err);
+      setErrorMessage(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -227,6 +262,12 @@ export function PhoneVerification({
         {recaptchaError ? (
           <p className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-xs text-[#B91C1C]">
             {recaptchaError}
+          </p>
+        ) : null}
+
+        {errorMessage ? (
+          <p className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-xs text-[#B91C1C]">
+            {errorMessage}
           </p>
         ) : null}
 
@@ -270,7 +311,7 @@ export function PhoneVerification({
           type="button"
           className="h-11 w-full rounded-xl bg-[#0A7EA4] text-white hover:bg-[#086a8a] disabled:opacity-60"
           disabled={loading || nationalNumber.replace(/\D/g, "").length < 6}
-          onClick={() => void sendCode()}
+          onClick={() => void sendCode(false)}
         >
           {loading ? (
             <span className="flex items-center gap-2">
@@ -278,7 +319,7 @@ export function PhoneVerification({
               Sending…
             </span>
           ) : (
-            "Send verification code"
+            "Send OTP"
           )}
         </Button>
       </div>
@@ -300,6 +341,12 @@ export function PhoneVerification({
           </p>
         ) : null}
       </div>
+
+      {errorMessage ? (
+        <p className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] px-3 py-2 text-xs text-[#B91C1C]">
+          {errorMessage}
+        </p>
+      ) : null}
 
       <div>
         <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[#64748B]">
@@ -330,7 +377,7 @@ export function PhoneVerification({
             Verifying…
           </span>
         ) : (
-          "Verify & save number"
+          "Verify OTP"
         )}
       </Button>
 
@@ -339,11 +386,13 @@ export function PhoneVerification({
           type="button"
           variant="ghost"
           className="text-[#64748B] hover:text-[#1A1A2E]"
-          disabled={loading}
+          disabled={loading || resendLoading}
           onClick={() => {
             setStep("phone");
             setOtp("");
-            setVerificationId("");
+            setConfirmationResult(null);
+            setResendSeconds(0);
+            setErrorMessage(null);
           }}
         >
           Change number
@@ -352,10 +401,19 @@ export function PhoneVerification({
           type="button"
           variant="ghost"
           className="text-[#0A7EA4] hover:text-[#086a8a]"
-          disabled={loading}
-          onClick={() => void sendCode()}
+          disabled={loading || resendLoading || resendSeconds > 0}
+          onClick={() => void sendCode(true)}
         >
-          Resend code
+          {resendLoading ? (
+            <span className="flex items-center gap-2">
+              <FiLoader className="h-4 w-4 animate-spin" />
+              Sending…
+            </span>
+          ) : resendSeconds > 0 ? (
+            `Resend in ${resendSeconds}s`
+          ) : (
+            "Resend OTP"
+          )}
         </Button>
       </div>
     </div>
@@ -367,6 +425,7 @@ export function PhoneVerificationDialog({
   onOpenChange,
   appJwt,
   onSuccess,
+  onVerified,
   initialCountryDial,
   initialNationalNumber,
 }: PhoneVerificationDialogProps) {
@@ -400,6 +459,7 @@ export function PhoneVerificationDialog({
               appJwt={appJwt}
               initialCountryDial={initialCountryDial}
               initialNationalNumber={initialNationalNumber}
+              onVerified={onVerified}
               onSuccess={(user) => {
                 onSuccess(user);
                 onOpenChange(false);

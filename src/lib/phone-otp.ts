@@ -7,6 +7,10 @@ export function formatToE164(countryDial: string, nationalNumber: string): strin
   return `+${dial}${national}`;
 }
 
+export function isValidE164(phone: string): boolean {
+  return /^\+[1-9]\d{7,14}$/.test(phone);
+}
+
 export type OtpProvider = "firebase" | "server";
 
 export function getPhoneOtpProvider(): OtpProvider {
@@ -26,8 +30,10 @@ export function isInvalidRecaptchaSiteKey(message: string): boolean {
 
 export function recaptchaSiteKeyFixMessage(): string {
   return (
-    'Google Cloud → Security → reCAPTCHA → open "Key for Identity Platform reCAPTCHA integration" ' +
-    "(starts with 6LdNGRQt) → add localhost and 127.0.0.1 under Domains → Save → hard-refresh."
+    "Phone reCAPTCHA failed. Try: (1) hard-refresh, (2) open http://127.0.0.1:3000 instead of localhost, " +
+    '(3) Google Cloud → reCAPTCHA → "Key for Identity Platform reCAPTCHA integration" (6LdNGRQt…) → ' +
+    "add localhost + 127.0.0.1, (4) Firebase Console → Authentication → Settings → reCAPTCHA → set Web key to " +
+    "None if App Check Enterprise is enabled, or (5) remove NEXT_PUBLIC_PHONE_OTP_PROVIDER=firebase to use server OTP locally."
   );
 }
 
