@@ -37,6 +37,10 @@ import {
   ReportPostDialog,
   type ReportPostTarget,
 } from "@/components/report-post-dialog";
+import {
+  EditPostDialog,
+  type EditablePost,
+} from "@/components/edit-post-dialog";
 
 interface PostFeedProps {
   activeTab: string;
@@ -58,7 +62,9 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   const [feedHasMore, setFeedHasMore] = useState(true);
   const observerTarget = useRef<HTMLDivElement | null>(null);
   const loadingMoreRef = useRef(false);
-  const { user, isAuthenticated } = useAppSelector((state) => state.auth);
+  const blockCardNavigationRef = useRef(false);
+  const { user, userId: authUserId, isAuthenticated } = useAppSelector((state) => state.auth);
+  const currentUserId = user?._id || authUserId;
   const dispatch = useAppDispatch();
 
   // Queries
@@ -86,12 +92,13 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   >(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportPostTarget | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<EditablePost | null>(null);
 
-  const openReportDialog = (
-    e: React.MouseEvent,
+  const openReportDialogForPost = (
     post: { userId: string; postContent?: string; userName?: string }
   ) => {
-    e.stopPropagation();
+    blockCardNavigationRef.current = true;
     if (!isAuthenticated) {
       dispatch(openAuthModal());
       return;
@@ -102,6 +109,24 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       postUserName: post.userName || "Unknown",
     });
     setReportOpen(true);
+  };
+
+  const openEditDialogForPost = (post: EditablePost) => {
+    blockCardNavigationRef.current = true;
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
+    setEditTarget(post);
+    setEditOpen(true);
+  };
+
+  const handleCardClick = (postId: string) => {
+    if (blockCardNavigationRef.current) {
+      blockCardNavigationRef.current = false;
+      return;
+    }
+    router.push(`/post/${postId}`);
   };
 
   const handleStartChat = (
@@ -229,8 +254,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     };
   }, [hasMore, isFetching, activeTab, posts.length]);
 
-  const handlePin = async (e: React.MouseEvent, postId: string) => {
-    e.stopPropagation();
+  const handlePin = async (postId: string) => {
+    blockCardNavigationRef.current = true;
     try {
       await pinPost({ postId }).unwrap();
       toast.success("Post pinned successfully!");
@@ -239,9 +264,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     }
   };
 
-  const handleUnpin = async (e: React.MouseEvent, postId: string) => {
-    e.stopPropagation();
-    // Find the BumperPost ID for this postId
+  const handleUnpin = async (postId: string) => {
+    blockCardNavigationRef.current = true;
     const pinnedEntry = pinnedData?.posts?.find((p: any) => p.postId?._id === postId || p.postId === postId);
     if (!pinnedEntry) return;
 
@@ -288,15 +312,16 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {posts.map((post: any) => {
-          const isOwner = user?._id === post.userId;
+          const isOwner =
+            !!currentUserId && String(currentUserId) === String(post.userId);
           const isAdmin = user?.role === "admin";
-          const canManagePin = isAuthenticated && (isOwner || isAdmin);
+          const canPin = isAuthenticated && isAdmin;
           const isPinned = pinnedData?.posts?.some((p: any) => p.postId?._id === post._id || p.postId === post._id);
 
           return (
             <div 
               key={post._id} 
-              onClick={() => router.push(`/post/${post._id}`)}
+              onClick={() => handleCardClick(post._id)}
               className="bg-white rounded-[14px] p-4.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col h-full cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-all border border-transparent hover:border-[#E0E0E0] relative"
             >
               <div className="flex items-center justify-between mb-4">
@@ -349,47 +374,75 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                     </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={clsx(
-                    "px-3 py-1 rounded-full text-[11px] font-medium shrink-0 uppercase",
-                    post.tag === "buy" && "bg-[#D1FAE5] text-[#065F46]",
-                    post.tag === "sell" && "bg-[#FEF3C7] text-[#92400E]",
-                    isGeneralPostType(post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
-                  )}>
-                    {getPostTypeLabel(post.tag)}
-                  </span>
+                  <div
+                    className="flex items-center gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <span className={clsx(
+                      "px-3 py-1 rounded-full text-[11px] font-medium shrink-0 uppercase",
+                      post.tag === "buy" && "bg-[#D1FAE5] text-[#065F46]",
+                      post.tag === "sell" && "bg-[#FEF3C7] text-[#92400E]",
+                      isGeneralPostType(post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
+                    )}>
+                      {getPostTypeLabel(post.tag)}
+                    </span>
                   
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <button className="text-[#757575] p-1 hover:bg-[#F5F5F5] rounded-full transition-colors">
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem 
-                        onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
-                        className="cursor-pointer"
-                      >
-                        View Profile
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => openReportDialog(e, post)}
-                        className="cursor-pointer"
-                      >
-                        Report Post
-                      </DropdownMenuItem>
-                      {canManagePin && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-[#757575] p-1 hover:bg-[#F5F5F5] rounded-full transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
                         <DropdownMenuItem 
-                          onClick={(e) => isPinned ? handleUnpin(e as any, post._id) : handlePin(e as any, post._id)}
+                          onSelect={() => {
+                            blockCardNavigationRef.current = true;
+                            router.push(`/profile/${post.userId}`);
+                          }}
                           className="cursor-pointer"
                         >
-                          <FaThumbtack className={clsx("w-3 h-3 mr-2", isPinned && "text-[#0A7EA4]")} />
-                          {isPinned ? "Unpin Post" : "Pin Post"}
+                          View Profile
                         </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                        {isOwner && (
+                          <DropdownMenuItem
+                            onSelect={() => openEditDialogForPost(post)}
+                            className="cursor-pointer"
+                          >
+                            Edit Post
+                          </DropdownMenuItem>
+                        )}
+                        {!isOwner && (
+                          <DropdownMenuItem
+                            onSelect={() => openReportDialogForPost(post)}
+                            className="cursor-pointer"
+                          >
+                            Report Post
+                          </DropdownMenuItem>
+                        )}
+                        {canPin && (
+                          <DropdownMenuItem 
+                            onSelect={() => {
+                              if (isPinned) {
+                                handleUnpin(post._id);
+                              } else {
+                                handlePin(post._id);
+                              }
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <FaThumbtack className={clsx("w-3 h-3 mr-2", isPinned && "text-[#0A7EA4]")} />
+                            {isPinned ? "Unpin Post" : "Pin Post"}
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
               </div>
 
               <p className="text-[14px] text-[#374151] leading-[1.6] mb-2 flex-1 line-clamp-3">
@@ -432,6 +485,11 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       open={reportOpen}
       onOpenChange={setReportOpen}
       target={reportTarget}
+    />
+    <EditPostDialog
+      open={editOpen}
+      onOpenChange={setEditOpen}
+      post={editTarget}
     />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}

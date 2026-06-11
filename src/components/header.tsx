@@ -1,5 +1,5 @@
 "use client";
-import { Bell, ChevronDown, LogOut, Menu, MessageCircle, MessageSquare, Settings, User } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, MessageSquare, PanelRightOpen, Settings, User } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -113,7 +113,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-6 ml-4">
-        <div className="hidden sm:flex items-center gap-4 border-r border-[#E0E0E0] pr-4 md:pr-6">
+        <div className="flex items-center gap-3 md:gap-4 border-r border-[#E0E0E0] pr-3 md:pr-6">
           <div className="relative" ref={notificationRef}>
             <button 
               onClick={() => { setShowNotifications(!showNotifications); setShowMessages(false); setShowUserMenu(false); }}
@@ -130,7 +130,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-[#E0E0E0] overflow-hidden z-[1000]"
+                  className="fixed left-4 right-4 top-[60px] z-[1000] bg-white rounded-xl shadow-xl border border-[#E0E0E0] overflow-hidden md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-80"
                 >
                   <div className="p-4 border-b border-[#F0F0F0] flex items-center justify-between">
                     <h3 className="font-bold text-[#1A1A2E]">Notifications</h3>
@@ -145,7 +145,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
                       </button>
                     )}
                   </div>
-                  <div className="max-h-80 overflow-y-auto scrollbar-hide">
+                  <div className="max-h-[calc(100vh-11rem)] md:max-h-80 overflow-y-auto scrollbar-hide">
                     {systemNotifications.length > 0 ? (
                       systemNotifications.slice(0, 10).map(notif => (
                         <div 
@@ -199,8 +199,9 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
         <button 
           onClick={onPartnersClick}
           className="xl:hidden p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors relative"
+          aria-label="Open partners panel"
         >
-          <MessageCircle className="w-6 h-6" />
+          <PanelRightOpen className="w-6 h-6" />
           <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#16A34A] rounded-full border-2 border-white"></span>
         </button>
 

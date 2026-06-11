@@ -5,12 +5,10 @@ import { GrLinkedin } from "react-icons/gr";
 import { useRouter } from "next/navigation";
 import { useGetPartnersQuery } from "@/store/endpoints/partners";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { useAppDispatch, useAppSelector } from "@/store/hooks";
-import { openAuthModal } from "@/store/uiSlice";
 
 const LINKEDIN_COMMUNITY_URL =
   process.env.NEXT_PUBLIC_LINKEDIN_COMMUNITY_URL ||
-  "https://www.linkedin.com/company/affiliate-chat-box";
+  "https://www.linkedin.com/company/affiliatechatbox/posts/";
 
 
 interface PartnersSidebarProps {
@@ -20,21 +18,10 @@ interface PartnersSidebarProps {
 
 export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
   const router = useRouter();
-  const dispatch = useAppDispatch();
-  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
-
   const { data, isLoading } = useGetPartnersQuery();
   const partners = data?.allpartners?.slice(0, 5) || [];
 
-  const canAccessLinkedinCommunity =
-    isAuthenticated && (user?.isLinkedinVerified || user?.role === "admin");
-
   const handleJoinCommunity = () => {
-    if (!canAccessLinkedinCommunity) {
-      dispatch(openAuthModal());
-      if (window.innerWidth < 1280) onClose?.();
-      return;
-    }
     window.open(LINKEDIN_COMMUNITY_URL, "_blank", "noopener,noreferrer");
     if (window.innerWidth < 1280) onClose?.();
   };
@@ -141,11 +128,7 @@ export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
             </div>
             <div className="flex flex-col min-w-0">
               <span className="text-[13px] font-bold">Join Community</span>
-              <span className="text-[11px] opacity-80">
-                {canAccessLinkedinCommunity
-                  ? "Follow us on LinkedIn"
-                  : "Sign in with LinkedIn to join"}
-              </span>
+              <span className="text-[11px] opacity-80">Follow us on LinkedIn</span>
             </div>
           </div>
           <ChevronRight className="w-4 h-4 shrink-0 group-hover:translate-x-1 transition-transform" />

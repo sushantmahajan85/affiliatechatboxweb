@@ -2,20 +2,12 @@
 import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import {
-  useFirebasePhoneVerifyMutation,
   useGetProfileQuery,
   useRegisterUserMutation,
   useGoogleVerifyMutation,
-  useVerifyUserMutation,
 } from "@/store/endpoints/auth";
 import { isFirebaseConfigured } from "@/lib/firebase-app";
-import {
-  confirmFirebasePhoneOtp,
-  firebasePhoneAuthErrorMessage,
-  getFirebasePhoneAuthIdToken,
-  resetPhoneRecaptcha,
-  sendFirebasePhoneOtp,
-} from "@/lib/firebase-phone-auth";
+import { PhoneVerificationDialog } from "@/components/PhoneVerification";
 import { setCredentials, updateUser } from "@/store/authSlice";
 import { useUpdateMobilePrivacyMutation } from "@/store/endpoints/members";
 import { Switch } from "@/components/ui/switch";
@@ -23,13 +15,6 @@ import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
 import { useGoogleLogin } from "@react-oauth/google";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
@@ -81,7 +66,9 @@ import {
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const { userId: currentUserId, user: viewerUser } = useAppSelector((state) => state.auth);
+  const { userId: currentUserId, user: viewerUser, token: appJwt } = useAppSelector(
+    (state) => state.auth
+  );
   const profileId = id || (currentUserId as string);
   const isOwnProfile = !id || id === currentUserId;
 
@@ -145,126 +132,26 @@ export function ProfilePage({ id }: { id?: string }) {
 
   const [updateProfile, { isLoading: isUpdating }] = useRegisterUserMutation();
   const [googleVerifyMutate, { isLoading: isGoogleVerifying }] = useGoogleVerifyMutation();
-  const [firebasePhoneVerifyMutate] = useFirebasePhoneVerifyMutation();
-  const [verifyUserMutate] = useVerifyUserMutation();
   const [mobileVerifyOpen, setMobileVerifyOpen] = useState(false);
-  const [mobileVerifyStep, setMobileVerifyStep] = useState<"phone" | "otp">("phone");
-  const [phoneCountryDial, setPhoneCountryDial] = useState(DEFAULT_PHONE_DIAL);
-  const [phoneNationalNumber, setPhoneNationalNumber] = useState("");
-  const [mobileOtpInput, setMobileOtpInput] = useState("");
-  const [isSendingPhoneOtp, setIsSendingPhoneOtp] = useState(false);
-  const [isVerifyingPhoneOtp, setIsVerifyingPhoneOtp] = useState(false);
-  const [firebaseVerificationId, setFirebaseVerificationId] = useState<string | null>(null);
-
-  const normalizedMobileDialogDigits = (): string => {
-    const national = phoneNationalNumber.replace(/\D/g, "").replace(/^0+/, "");
-    const cc = phoneCountryDial.replace(/\D/g, "");
-    if (!national) return "";
-    return `+${cc}${national}`;
-  };
-
-  const apiErrorMessage = (err: unknown, fallback: string): string => {
-    const e = err as { data?: { message?: string } };
-    return e.data?.message || fallback;
-  };
-
-  const resetMobileDialog = (): void => {
-    setMobileVerifyStep("phone");
-    setMobileOtpInput("");
-    setPhoneNationalNumber("");
-    setPhoneCountryDial(DEFAULT_PHONE_DIAL);
-    setFirebaseVerificationId(null);
-    resetPhoneRecaptcha();
-  };
+  const [phoneVerifyInitial, setPhoneVerifyInitial] = useState({
+    dial: DEFAULT_PHONE_DIAL,
+    national: "",
+  });
 
   const openMobileVerifyDialog = (): void => {
     if (!isFirebaseConfigured()) {
-      toast.error("Firebase is not configured. Check NEXT_PUBLIC_FIREBASE_* in .env.local.");
+      toast.error("Firebase not configured in .env.local");
+      return;
+    }
+    if (!appJwt) {
+      toast.error("Log in first.");
       return;
     }
     const u = data?.user;
     const raw = u?.mobileNumber ? String(u.mobileNumber).replace(/\D/g, "") : "";
     const { dial, national } = splitStoredMobileForCountryInputs(raw, DEFAULT_PHONE_DIAL);
-    setPhoneCountryDial(dial);
-    setPhoneNationalNumber(national);
-    setMobileOtpInput("");
-    setFirebaseVerificationId(null);
-    setMobileVerifyStep("phone");
+    setPhoneVerifyInitial({ dial, national });
     setMobileVerifyOpen(true);
-  };
-
-  /** Web equivalent of Android's verifyPhoneNumber → codeSent → PhoneAuthProvider.credential → signInWithCredential */
-  const handleSendPhoneOtp = async (): Promise<void> => {
-    const e164 = normalizedMobileDialogDigits();
-    const nationalLen = phoneNationalNumber.replace(/\D/g, "").length;
-    if (!e164 || nationalLen < 6) {
-      toast.error("Enter a valid mobile number.");
-      return;
-    }
-    setIsSendingPhoneOtp(true);
-    try {
-      const verificationId = await sendFirebasePhoneOtp(e164);
-      setFirebaseVerificationId(verificationId);
-      setMobileVerifyStep("otp");
-      toast.success("Verification code sent by SMS.");
-    } catch (err: unknown) {
-      toast.error(firebasePhoneAuthErrorMessage(err));
-    } finally {
-      setIsSendingPhoneOtp(false);
-    }
-  };
-
-  /** Web equivalent of Android's PhoneAuthProvider.credential → signInWithCredential → verifyUser API */
-  const handleVerifyPhoneOtpSubmit = async (): Promise<void> => {
-    const code = mobileOtpInput.replace(/\D/g, "");
-    if (!/^\d{6}$/.test(code)) {
-      toast.error("Enter the 6-digit code.");
-      return;
-    }
-    if (!firebaseVerificationId) {
-      toast.error("Session expired. Request a new code.");
-      setMobileVerifyStep("phone");
-      return;
-    }
-    setIsVerifyingPhoneOtp(true);
-    try {
-      // Same as Android: PhoneAuthProvider.credential(verificationId, smsCode) + signInWithCredential
-      await confirmFirebasePhoneOtp(firebaseVerificationId, code);
-
-      // Sync verified phone to our backend (same as Android's verifyUser API call)
-      let response: { user: { jwttoken: string; _id: string; isverified: boolean } & Record<string, unknown> };
-      try {
-        const firebaseIdToken = await getFirebasePhoneAuthIdToken();
-        response = await firebasePhoneVerifyMutate({ firebaseIdToken }).unwrap();
-      } catch {
-        const e164 = normalizedMobileDialogDigits();
-        const digits = e164.replace(/\D/g, "");
-        response = await verifyUserMutate({ mobileNumber: digits ? `+${digits}` : e164 }).unwrap();
-      }
-
-      dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
-      const phoneIso = dialToIso(phoneCountryDial) || DEFAULT_COUNTRY_ISO;
-      try {
-        await saveFlagForIso(phoneIso);
-      } catch {
-        // Phone verified; flag sync is best-effort (same as app after number change).
-      }
-      refetch();
-      toast.success("Mobile verified.");
-      setMobileVerifyOpen(false);
-      resetMobileDialog();
-    } catch (err: unknown) {
-      toast.error(apiErrorMessage(err, firebasePhoneAuthErrorMessage(err)));
-    } finally {
-      setIsVerifyingPhoneOtp(false);
-    }
-  };
-
-  const handleResendPhoneOtp = async (): Promise<void> => {
-    setMobileVerifyStep("phone");
-    setFirebaseVerificationId(null);
-    setMobileOtpInput("");
-    await handleSendPhoneOtp();
   };
 
   const promptGoogleVerification = useGoogleLogin({
@@ -1047,123 +934,17 @@ export function ProfilePage({ id }: { id?: string }) {
           </div>
         </div>
     </div>
-    <Dialog
+    <PhoneVerificationDialog
       open={mobileVerifyOpen}
-      onOpenChange={(open) => {
-        setMobileVerifyOpen(open);
-        if (!open) resetMobileDialog();
+      onOpenChange={setMobileVerifyOpen}
+      appJwt={appJwt ?? ""}
+      initialCountryDial={phoneVerifyInitial.dial}
+      initialNationalNumber={phoneVerifyInitial.national}
+      onSuccess={(user) => {
+        dispatch(setCredentials({ user, token: user.jwttoken }));
+        refetch();
       }}
-    >
-      <DialogContent className="sm:max-w-[400px] bg-white rounded-2xl border border-[#E2E8F0]">
-        <DialogHeader>
-          <DialogTitle className="text-[#1A1A2E]">
-            {mobileVerifyStep === "phone" ? "Verify mobile number" : "Enter verification code"}
-          </DialogTitle>
-          <DialogDescription className="text-[#64748B]">
-            {mobileVerifyStep === "phone"
-              ? "Same Firebase SMS as the app. Enter your number, tap Send code, then complete the reCAPTCHA box at the bottom of the screen."
-              : `Code sent to ${(() => {
-                  const d = normalizedMobileDialogDigits();
-                  if (d.length <= 4) return "••••";
-                  return `${"•".repeat(d.length - 4)}${d.slice(-4)}`;
-                })()}`}
-          </DialogDescription>
-        </DialogHeader>
-        {mobileVerifyStep === "phone" ? (
-          <div className="flex flex-col gap-4 pt-2">
-            <div className="flex gap-2 items-stretch">
-              <select
-                value={phoneCountryDial}
-                onChange={(e) => setPhoneCountryDial(e.target.value)}
-                className="h-10 min-w-[122px] rounded-xl border border-[#E2E8F0] bg-white text-black text-sm font-medium px-2 shrink-0"
-                aria-label="Country calling code"
-              >
-                {PHONE_COUNTRIES.map((o) => (
-                  <option key={o.dial} value={o.dial}>
-                    {o.label} +{o.dial}
-                  </option>
-                ))}
-              </select>
-              <Input
-                type="tel"
-                inputMode="numeric"
-                autoComplete="tel-national"
-                placeholder="Mobile number"
-                value={phoneNationalNumber}
-                onChange={(e) =>
-                  setPhoneNationalNumber(e.target.value.replace(/[^\d\s-]/g, ""))
-                }
-                className="flex-1 rounded-xl border-[#E2E8F0] bg-white text-black placeholder:text-neutral-500"
-              />
-            </div>
-            <Button
-              type="button"
-              className="w-full rounded-xl bg-[#0A7EA4] hover:bg-[#086a8a] text-white"
-              disabled={isSendingPhoneOtp}
-              onClick={() => void handleSendPhoneOtp()}
-            >
-              {isSendingPhoneOtp ? (
-                <span className="flex items-center justify-center gap-2">
-                  <FiLoader className="w-4 h-4 animate-spin" /> Sending…
-                </span>
-              ) : (
-                "Send code"
-              )}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4 pt-2">
-            <Input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder="6-digit code"
-              value={mobileOtpInput}
-              onChange={(e) => setMobileOtpInput(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="rounded-xl border-[#E2E8F0] bg-white text-black text-center text-2xl tracking-[0.4em] font-mono placeholder:text-neutral-500"
-            />
-            <Button
-              type="button"
-              className="w-full rounded-xl bg-[#0A7EA4] hover:bg-[#086a8a] text-white"
-              disabled={isVerifyingPhoneOtp}
-              onClick={() => void handleVerifyPhoneOtpSubmit()}
-            >
-              {isVerifyingPhoneOtp ? (
-                <span className="flex items-center justify-center gap-2">
-                  <FiLoader className="w-4 h-4 animate-spin" /> Verifying…
-                </span>
-              ) : (
-                "Verify"
-              )}
-            </Button>
-            <div className="flex gap-2 justify-between">
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-[#64748B]"
-                disabled={isSendingPhoneOtp || isVerifyingPhoneOtp}
-                onClick={() => {
-                  setMobileVerifyStep("phone");
-                  setFirebaseVerificationId(null);
-                  setMobileOtpInput("");
-                }}
-              >
-                Change number
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-[#0A7EA4]"
-                disabled={isSendingPhoneOtp || isVerifyingPhoneOtp}
-                onClick={() => void handleResendPhoneOtp()}
-              >
-                Resend code
-              </Button>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+    />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

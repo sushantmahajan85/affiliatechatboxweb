@@ -77,6 +77,14 @@ export const postsApi = api.injectEndpoints({
       }),
       invalidatesTags: ['Post'],
     }),
+    editPost: builder.mutation<any, { postId: string; formData: FormData }>({
+      query: ({ postId, formData }) => ({
+        url: `/api/posts/${postId}/edit_post`,
+        method: "POST",
+        body: formData,
+      }),
+      invalidatesTags: (_result, _error, { postId }) => [{ type: "Post", id: postId }, "Post"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -93,4 +101,5 @@ export const {
   useGetPinnedPostsQuery,
   usePinPostMutation,
   useUnpinPostMutation,
+  useEditPostMutation,
 } = postsApi;

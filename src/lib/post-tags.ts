@@ -29,3 +29,30 @@ export function parsePostHashtags(postDescription?: string | null): string[] {
 
   return tags;
 }
+
+export function normalizePostTag(raw: string): string {
+  return raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
+}
+
+export function formatTagsForPostDescription(tags: string[]): string {
+  if (tags.length === 0) return "";
+  return tags.map((t) => `#${normalizePostTag(t)}`).join(" ");
+}
+
+export const STATIC_POST_TAGS = [
+  "Affiliate Marketing",
+  "CPA",
+  "CPL",
+  "PPC",
+  "SEO",
+  "Lead Gen",
+  "E-commerce",
+  "Influencer",
+  "Content Marketing",
+  "Email Marketing",
+  "Social Media",
+  "Display Ads",
+  "Networking",
+  "Partnership",
+  "SaaS",
+] as const;

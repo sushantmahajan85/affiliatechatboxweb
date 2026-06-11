@@ -7,6 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { getPostTypeLabel, isGeneralPostType } from "@/lib/post-tags";
@@ -48,6 +54,10 @@ import {
   ReportPostDialog,
   type ReportPostTarget,
 } from "@/components/report-post-dialog";
+import {
+  EditPostDialog,
+  type EditablePost,
+} from "@/components/edit-post-dialog";
 
 export function PostDetailsPage() {
   const { id } = useParams();
@@ -58,6 +68,7 @@ export function PostDetailsPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportPostTarget | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
 
@@ -154,6 +165,9 @@ export function PostDetailsPage() {
   }
 
   const post = data.post;
+  const currentUserId = currentUser?._id;
+  const isOwner =
+    !!currentUserId && String(currentUserId) === String(post.userId);
 
 
 const renderContent = (text: string) => {
@@ -186,9 +200,41 @@ const renderContent = (text: string) => {
           <span className="font-medium text-[15px]">Back to feed</span>
         </button>
         <div className="flex items-center gap-2">
-          <button className="p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors">
-            <FiMoreVertical className="w-5 h-5" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors"
+                aria-label="Post options"
+              >
+                <FiMoreVertical className="w-5 h-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={() => router.push(`/profile/${post.userId}`)}
+                className="cursor-pointer"
+              >
+                View Profile
+              </DropdownMenuItem>
+              {isOwner && (
+                <DropdownMenuItem
+                  onClick={() => setEditOpen(true)}
+                  className="cursor-pointer"
+                >
+                  Edit Post
+                </DropdownMenuItem>
+              )}
+              {!isOwner && (
+                <DropdownMenuItem
+                  onClick={openReportDialog}
+                  className="cursor-pointer"
+                >
+                  Report Post
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -282,14 +328,16 @@ const renderContent = (text: string) => {
             <FiShare2 className="w-5 h-5 text-[#6B7280]" />
             <span>Share Post</span>
           </button>
-          <button
-            type="button"
-            onClick={openReportDialog}
-            className="sm:w-auto px-6 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#EF4444] text-[15px] font-medium hover:bg-[#FEF2F2] transition-colors"
-          >
-            <FiFlag className="w-5 h-5" />
-            <span className="sm:hidden lg:inline">Report Post</span>
-          </button>
+          {!isOwner && (
+            <button
+              type="button"
+              onClick={openReportDialog}
+              className="sm:w-auto px-6 flex items-center justify-center gap-2 h-11 border border-[#E0E0E0] rounded-xl text-[#EF4444] text-[15px] font-medium hover:bg-[#FEF2F2] transition-colors"
+            >
+              <FiFlag className="w-5 h-5" />
+              <span className="sm:hidden lg:inline">Report Post</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -403,6 +451,11 @@ const renderContent = (text: string) => {
       open={reportOpen}
       onOpenChange={setReportOpen}
       target={reportTarget}
+    />
+    <EditPostDialog
+      open={editOpen}
+      onOpenChange={setEditOpen}
+      post={post as EditablePost}
     />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}

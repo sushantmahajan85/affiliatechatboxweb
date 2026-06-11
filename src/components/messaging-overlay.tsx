@@ -589,7 +589,7 @@ export function MessagingOverlay() {
 
   return (
     <>
-    <div className="fixed bottom-0 right-8 flex items-end gap-3 z-[100] pointer-events-none">
+    <div className="fixed bottom-0 right-8 hidden md:flex items-end gap-3 z-[100] pointer-events-none">
       {/* Active Chat Windows */}
       <div className="flex items-end gap-3 pointer-events-auto">
         {activeChats.map((chat) => (
