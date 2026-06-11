@@ -127,7 +127,6 @@ export function PhoneVerification({
     window.addEventListener("error", onWindowError);
     return () => {
       window.removeEventListener("error", onWindowError);
-      if (!useServerOtp) document.getElementById(RECAPTCHA_CONTAINER_ID)?.remove();
     };
   }, [useServerOtp]);
 

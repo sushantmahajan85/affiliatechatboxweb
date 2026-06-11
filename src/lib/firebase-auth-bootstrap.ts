@@ -22,5 +22,3 @@ export function bootstrapFirebaseAuthRecaptcha(): Promise<void> {
 
   return authRecaptchaBootstrapPromise;
 }
-
-bootstrapFirebaseAuthRecaptcha();
