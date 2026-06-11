@@ -25,3 +25,5 @@ function bootstrapFirebaseAppCheckDebug(): void {
 }
 
 bootstrapFirebaseAppCheckDebug();
+
+export {};

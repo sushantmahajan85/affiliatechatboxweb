@@ -323,7 +323,10 @@ export function ProfilePage({ id }: { id?: string }) {
       toast.success("Profile updated.");
     } catch (err) {
       console.error("Failed to update profile:", err);
-      toast.error(apiErrorMessage(err, "Failed to update profile."));
+      toast.error(
+        (err as { data?: { message?: string } })?.data?.message ||
+          "Failed to update profile."
+      );
     }
   };
 
@@ -941,7 +944,7 @@ export function ProfilePage({ id }: { id?: string }) {
       initialCountryDial={phoneVerifyInitial.dial}
       initialNationalNumber={phoneVerifyInitial.national}
       onSuccess={(user) => {
-        dispatch(setCredentials({ user, token: user.jwttoken }));
+        dispatch(setCredentials({ user: user as any, token: user.jwttoken }));
         refetch();
       }}
     />

@@ -1,5 +1,11 @@
 import { getApiBaseUrl } from "@/lib/api-base-url";
-import { formatToE164 } from "@/lib/firebase";
+
+export function formatToE164(countryDial: string, nationalNumber: string): string {
+  const dial = countryDial.replace(/\D/g, "");
+  const national = nationalNumber.replace(/\D/g, "");
+  if (!dial || !national) return "";
+  return `+${dial}${national}`;
+}
 
 export type OtpProvider = "firebase" | "server";
 
@@ -72,5 +78,3 @@ export async function verifyServerPhoneOtp(
   }
   return { user: data.user };
 }
-
-export { formatToE164 };
