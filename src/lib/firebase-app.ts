@@ -1,10 +1,6 @@
 import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
-import type { Auth } from "firebase/auth";
-import { getAuth, inMemoryPersistence, initializeAuth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
-
-const firebaseAuthByApp = new WeakMap<FirebaseApp, Auth>();
 
 function envReady(value: string | undefined): boolean {
   return Boolean(value && value.trim());
@@ -33,23 +29,6 @@ export function getFirebaseApp(): FirebaseApp | null {
     appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
     measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
   });
-}
-
-/** Browser-only Auth singleton (in-memory — used for phone OTP, not app login). */
-export function getClientFirebaseAuth(): Auth | null {
-  if (typeof window === "undefined") return null;
-  const app = getFirebaseApp();
-  if (!app) return null;
-  const cached = firebaseAuthByApp.get(app);
-  if (cached) return cached;
-  let auth: Auth;
-  try {
-    auth = initializeAuth(app, { persistence: inMemoryPersistence });
-  } catch {
-    auth = getAuth(app);
-  }
-  firebaseAuthByApp.set(app, auth);
-  return auth;
 }
 
 export function getFirestoreDb(): Firestore | null {
