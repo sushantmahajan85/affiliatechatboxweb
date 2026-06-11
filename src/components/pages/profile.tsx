@@ -52,9 +52,11 @@ import {
   countryLabelFromFlag,
   normalizeCountryCode,
 } from "@/lib/country-flag";
-import { PhoneVerification } from "@/components/PhoneVerification";
+import { PhoneVerificationModal } from "@/components/PhoneVerification";
 import { isFirebaseConfigured } from "@/lib/firebase-app";
 import { DEFAULT_COUNTRY_ISO, countryOptionsForIso } from "@/lib/phone-countries";
+import { formatPhoneNumberIntl } from "react-phone-number-input";
+import type { Country } from "react-phone-number-input";
 
 export function ProfilePage({ id }: { id?: string }) {
   const router = useRouter();
@@ -89,6 +91,7 @@ export function ProfilePage({ id }: { id?: string }) {
     skip: !profileId,
   });
 
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
   const [linkedinGuardReason, setLinkedinGuardReason] = useState<
     "sender_not_verified" | "recipient_not_verified" | null
@@ -229,6 +232,18 @@ export function ProfilePage({ id }: { id?: string }) {
 
   const hasPhoneNumber =
     Boolean(profile.phone) && profile.phone !== "No phone number";
+
+  const displayPhoneNumber = (phone: string) => {
+    if (!phone || phone === "No phone number") return "Not added";
+    const e164 = phone.startsWith("+") ? phone : `+${phone.replace(/\D/g, "")}`;
+    return formatPhoneNumberIntl(e164) || phone;
+  };
+
+  const canAddPhone =
+    isOwnProfile &&
+    !profile.otpVerified &&
+    isFirebaseConfigured() &&
+    Boolean(appJwt);
 
   const onMobilePrivacyChange = async (next: boolean) => {
     if (!currentUserId || mobilePrivacySaving) return;
@@ -696,26 +711,49 @@ export function ProfilePage({ id }: { id?: string }) {
               <span className="text-sm font-medium text-[#1A1A1A]">{profile.email}</span>
             )}
           </div>
-          {isOwnProfile && hasPhoneNumber && (
+          {isOwnProfile && (
             <div className="py-3 border-b border-[#F8FAFC]">
               <div className="flex justify-between items-center gap-4">
-                <span className="text-sm text-[#64748B]">Phone Number</span>
-                <span className="text-sm font-medium text-[#1A1A1A]">{profile.phone}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t border-[#F8FAFC]">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#1A1A1A]">Keep mobile number private</p>
-                  <p className="text-xs text-[#94A3B8] mt-0.5">
-                    Hide your number from other members&apos; profiles
-                  </p>
+                <span className="text-sm text-[#64748B] shrink-0">Phone Number</span>
+                <div className="flex items-center justify-end gap-3 min-w-0 flex-1">
+                  <span
+                    className={`text-sm font-medium truncate ${
+                      hasPhoneNumber && profile.otpVerified
+                        ? "text-[#1A1A1A]"
+                        : "text-[#94A3B8]"
+                    }`}
+                  >
+                    {hasPhoneNumber && profile.otpVerified
+                      ? displayPhoneNumber(profile.phone)
+                      : "Not added"}
+                  </span>
+                  {canAddPhone ? (
+                    <button
+                      type="button"
+                      onClick={() => setPhoneModalOpen(true)}
+                      className="shrink-0 rounded-lg border border-[#0A7EA4]/20 bg-[#0A7EA4]/5 px-3 py-1.5 text-xs font-bold text-[#0A7EA4] transition hover:bg-[#0A7EA4]/10"
+                    >
+                      Add phone number
+                    </button>
+                  ) : null}
                 </div>
-                <Switch
-                  checked={isMobilePrivate}
-                  onCheckedChange={(value) => void onMobilePrivacyChange(value)}
-                  disabled={mobilePrivacySaving}
-                  className="data-[state=checked]:bg-[#1C3A4A] shrink-0"
-                />
               </div>
+              {hasPhoneNumber && profile.otpVerified ? (
+                <div className="flex items-center justify-between gap-4 mt-3 pt-3 border-t border-[#F8FAFC]">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#1A1A1A]">Keep mobile number private</p>
+                    <p className="text-xs text-[#94A3B8] mt-0.5">
+                      Hide your number from other members&apos; profiles
+                    </p>
+                  </div>
+                  <Switch
+                    checked={isMobilePrivate}
+                    onCheckedChange={(value) => void onMobilePrivacyChange(value)}
+                    disabled={mobilePrivacySaving}
+                    className="data-[state=checked]:bg-[#1C3A4A] shrink-0"
+                  />
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -857,7 +895,23 @@ export function ProfilePage({ id }: { id?: string }) {
             </div>
 
             {/* Mobile / contact verification */}
-            <div className="p-5 transition-colors">
+            <div
+              role={canAddPhone ? "button" : undefined}
+              tabIndex={canAddPhone ? 0 : undefined}
+              onClick={() => {
+                if (!canAddPhone) return;
+                setPhoneModalOpen(true);
+              }}
+              onKeyDown={(e) => {
+                if (!canAddPhone) return;
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                setPhoneModalOpen(true);
+              }}
+              className={`p-5 transition-colors ${
+                canAddPhone ? "cursor-pointer hover:bg-[#F8FAFC] group" : "cursor-default"
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
@@ -875,7 +929,7 @@ export function ProfilePage({ id }: { id?: string }) {
                     <p className="text-[13px] text-[#64748B]">
                       {profile.otpVerified
                         ? "Secure access via verified phone"
-                        : "Add your number and verify with a code we send by SMS"}
+                        : "Add your number in Account Information and verify with SMS"}
                     </p>
                   </div>
                 </div>
@@ -887,26 +941,11 @@ export function ProfilePage({ id }: { id?: string }) {
                   >
                     {profile.otpVerified ? "VERIFIED" : "VERIFY"}
                   </span>
+                  {canAddPhone ? (
+                    <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" aria-hidden />
+                  ) : null}
                 </div>
               </div>
-
-              {isOwnProfile && !profile.otpVerified && isFirebaseConfigured() && appJwt ? (
-                <PhoneVerification
-                  appJwt={appJwt}
-                  onVerified={(phoneE164) => {
-                    setProfile((prev) => ({
-                      ...prev,
-                      otpVerified: true,
-                      phone: phoneE164.replace(/\D/g, "") || phoneE164,
-                    }));
-                    toast.success("Phone number verified.");
-                  }}
-                  onSuccess={(user) => {
-                    dispatch(setCredentials({ user: user as any, token: user.jwttoken }));
-                    refetch();
-                  }}
-                />
-              ) : null}
 
               {isOwnProfile && !profile.otpVerified && !isFirebaseConfigured() ? (
                 <p className="mt-4 text-xs text-amber-700 border-t border-[#F1F5F9] pt-4">
@@ -917,6 +956,24 @@ export function ProfilePage({ id }: { id?: string }) {
           </div>
         </div>
     </div>
+    <PhoneVerificationModal
+      open={phoneModalOpen}
+      onOpenChange={setPhoneModalOpen}
+      appJwt={appJwt || ""}
+      defaultCountry={(profile.countryIso || DEFAULT_COUNTRY_ISO) as Country}
+      onVerified={(phoneE164) => {
+        setProfile((prev) => ({
+          ...prev,
+          otpVerified: true,
+          phone: phoneE164.replace(/\D/g, "") || phoneE164,
+        }));
+        toast.success("Phone number verified.");
+      }}
+      onSuccess={(user) => {
+        dispatch(setCredentials({ user: user as never, token: user.jwttoken }));
+        refetch();
+      }}
+    />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

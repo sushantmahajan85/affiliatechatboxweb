@@ -2,16 +2,34 @@
 
 import { auth } from "@/lib/firebase";
 import { getApiBaseUrl } from "@/lib/api-base-url";
+import { DEFAULT_COUNTRY_ISO } from "@/lib/phone-countries";
+import { getPhoneFormatHint, getPhoneValidationError } from "@/lib/phone-validation";
+import { PhoneCountrySelect } from "@/components/phone-country-select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { cn } from "@/components/ui/utils";
 import {
   type ConfirmationResult,
   RecaptchaVerifier,
   signInWithPhoneNumber,
   signOut,
 } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { FiLoader, FiPhone } from "react-icons/fi";
+import PhoneInput from "react-phone-number-input";
+import type { Country, Value as E164Number } from "react-phone-number-input";
 
-type PhoneVerificationProps = {
+type PhoneVerificationModalProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   appJwt: string;
+  defaultCountry?: Country;
   disabled?: boolean;
   onVerified?: (phoneE164: string) => void;
   onSuccess?: (user: { jwttoken: string; mobileNumber?: string }) => void;
@@ -29,6 +47,22 @@ declare global {
   }
 }
 
+const PhoneNumberInput = forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
+  ({ className, ...props }, ref) => (
+    <input
+      ref={ref}
+      {...props}
+      className={cn(
+        "h-12 min-w-0 flex-1 rounded-xl border border-[#E2E8F0] bg-white px-4 text-sm text-[#1A1A2E] shadow-sm",
+        "placeholder:text-[#94A3B8] focus:border-[#0A7EA4] focus:outline-none focus:ring-2 focus:ring-[#0A7EA4]/20",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+    />
+  )
+);
+PhoneNumberInput.displayName = "PhoneNumberInput";
+
 function resetRecaptchaPerFirebaseDocs(): void {
   if (typeof window.grecaptcha !== "undefined" && window.recaptchaWidgetId !== undefined) {
     window.grecaptcha.reset(window.recaptchaWidgetId);
@@ -43,7 +77,7 @@ function resetRecaptchaPerFirebaseDocs(): void {
   }
 }
 
-function destroyRecaptchaVerifier(): void {
+function destroyRecaptchaVerifier(container?: HTMLElement | null): void {
   if (window.recaptchaVerifier) {
     try {
       window.recaptchaVerifier.clear();
@@ -53,23 +87,25 @@ function destroyRecaptchaVerifier(): void {
     window.recaptchaVerifier = null;
   }
   window.recaptchaWidgetId = undefined;
-  document.getElementById("recaptcha-container")?.replaceChildren();
+  container?.replaceChildren();
 }
 
-function setupRecaptchaVerifier(onExpired: () => void): void {
-  destroyRecaptchaVerifier();
+function setupRecaptchaVerifier(
+  container: HTMLElement | null,
+  onExpired: () => void
+): RecaptchaVerifier | null {
+  destroyRecaptchaVerifier(container);
 
-  const element = document.getElementById("recaptcha-container");
-  if (!element) return;
+  if (!container) return null;
 
   if (testMode) {
     auth.settings.appVerificationDisabledForTesting = true;
   }
 
-  window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+  window.recaptchaVerifier = new RecaptchaVerifier(auth, container, {
     size: "invisible",
     callback: () => {
-      /* reCAPTCHA solved — signInWithPhoneNumber may proceed */
+      /* reCAPTCHA solved */
     },
     "expired-callback": () => {
       onExpired();
@@ -79,44 +115,93 @@ function setupRecaptchaVerifier(onExpired: () => void): void {
   void window.recaptchaVerifier.render().then((widgetId) => {
     window.recaptchaWidgetId = widgetId;
   });
+
+  return window.recaptchaVerifier;
 }
 
-export function PhoneVerification({
+function resetModalState(
+  setPhoneNumber: (v: E164Number | undefined) => void,
+  setOtp: (v: string) => void,
+  setConfirmationResult: (v: ConfirmationResult | null) => void,
+  setError: (v: string) => void,
+  setSuccess: (v: string) => void
+): void {
+  setPhoneNumber(undefined);
+  setOtp("");
+  setConfirmationResult(null);
+  setError("");
+  setSuccess("");
+}
+
+export function PhoneVerificationModal({
+  open,
+  onOpenChange,
   appJwt,
+  defaultCountry = DEFAULT_COUNTRY_ISO as Country,
   disabled = false,
   onVerified,
   onSuccess,
-}: PhoneVerificationProps) {
-  const [phoneNumber, setPhoneNumber] = useState("");
+}: PhoneVerificationModalProps) {
+  const recaptchaContainerRef = useRef<HTMLDivElement>(null);
+  const [country, setCountry] = useState<Country | undefined>(defaultCountry);
+  const [phoneNumber, setPhoneNumber] = useState<E164Number | undefined>();
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [otp, setOtp] = useState("");
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  useEffect(() => {
-    setupRecaptchaVerifier(() => {
+  const phoneFieldError =
+    phoneTouched || phoneNumber ? getPhoneValidationError(phoneNumber, country) : null;
+  const phoneFormatHint = getPhoneFormatHint(country);
+  const canSendOtp = Boolean(phoneNumber) && !phoneFieldError;
+
+  const initRecaptcha = () =>
+    setupRecaptchaVerifier(recaptchaContainerRef.current, () => {
       setError("reCAPTCHA verification expired. Please try again.");
       resetRecaptchaPerFirebaseDocs();
     });
 
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    initRecaptcha();
+
     return () => {
-      destroyRecaptchaVerifier();
+      destroyRecaptchaVerifier(recaptchaContainerRef.current);
     };
-  }, []);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      resetModalState(setPhoneNumber, setOtp, setConfirmationResult, setError, setSuccess);
+      setCountry(defaultCountry);
+      setPhoneTouched(false);
+      destroyRecaptchaVerifier(recaptchaContainerRef.current);
+    }
+  }, [open, defaultCountry]);
+
+  const handleOpenChange = (next: boolean) => {
+    if (!next) {
+      resetModalState(setPhoneNumber, setOtp, setConfirmationResult, setError, setSuccess);
+      setCountry(defaultCountry);
+      setPhoneTouched(false);
+      destroyRecaptchaVerifier(recaptchaContainerRef.current);
+    }
+    onOpenChange(next);
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    console.log("Checking App Config ID:", auth.config.apiKey);
-
     setError("");
     setSuccess("");
     setLoading(true);
 
-    if (!phoneNumber.startsWith("+")) {
-      setError("Phone number must start with a country code (e.g., +880 or +1)");
+    setPhoneTouched(true);
+    const validationError = getPhoneValidationError(phoneNumber, country);
+    if (validationError || !phoneNumber) {
+      setError(validationError ?? "Enter your mobile number.");
       setLoading(false);
       return;
     }
@@ -128,26 +213,21 @@ export function PhoneVerification({
     }
 
     try {
-      const appVerifier = window.recaptchaVerifier;
+      let appVerifier = window.recaptchaVerifier ?? initRecaptcha();
       if (!appVerifier) {
-        throw new Error("reCAPTCHA is not ready. Refresh the page and try again.");
+        throw new Error("reCAPTCHA is not ready. Close and reopen this dialog.");
       }
 
-      const confirmation = await signInWithPhoneNumber(auth, phoneNumber.trim(), appVerifier);
-
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
       setConfirmationResult(confirmation);
-      setSuccess("Verification code sent to your phone!");
+      setSuccess("Verification code sent to your phone.");
     } catch (err) {
       console.error("Error sending OTP:", err);
-      const caught = err as { message?: string; code?: string };
-      setError(caught.message || "Failed to send OTP. Check number format.");
+      const caught = err as { message?: string };
+      setError(caught.message || "Failed to send OTP. Check the number and try again.");
 
       resetRecaptchaPerFirebaseDocs();
-      destroyRecaptchaVerifier();
-      setupRecaptchaVerifier(() => {
-        setError("reCAPTCHA verification expired. Please try again.");
-        resetRecaptchaPerFirebaseDocs();
-      });
+      initRecaptcha();
     } finally {
       setLoading(false);
     }
@@ -161,6 +241,12 @@ export function PhoneVerification({
 
     if (!confirmationResult) {
       setError("Session expired. Send a new code.");
+      setLoading(false);
+      return;
+    }
+
+    if (otp.length !== 6) {
+      setError("Enter the 6-digit code.");
       setLoading(false);
       return;
     }
@@ -195,11 +281,13 @@ export function PhoneVerification({
       }
 
       await signOut(auth);
-      destroyRecaptchaVerifier();
+      destroyRecaptchaVerifier(recaptchaContainerRef.current);
 
       setSuccess("Phone verified successfully!");
       onVerified?.(phoneE164);
       if (data.user) onSuccess?.(data.user);
+
+      setTimeout(() => handleOpenChange(false), 600);
     } catch (err) {
       console.error("Error verifying OTP:", err);
       const caught = err as { message?: string };
@@ -214,113 +302,159 @@ export function PhoneVerification({
     setError("");
     setSuccess("");
     setConfirmationResult(null);
-    destroyRecaptchaVerifier();
-    setupRecaptchaVerifier(() => {
-      setError("reCAPTCHA verification expired. Please try again.");
-      resetRecaptchaPerFirebaseDocs();
-    });
+    initRecaptcha();
   };
 
   return (
-    <div className="mt-4 border-t border-[#F1F5F9] pt-4">
-      <div className="mb-6 text-center sm:text-left">
-        <p className="text-sm text-[#64748B]">
-          {!confirmationResult
-            ? "Enter your mobile number to securely receive your authentication token."
-            : `We sent a 6-digit one-time code to ${phoneNumber}`}
-        </p>
-        {testMode && !confirmationResult ? (
-          <p className="mt-1 text-xs text-amber-700">
-            Test mode (per Firebase docs): use fictional numbers from Firebase Console →
-            Authentication → Phone → Phone numbers for testing (e.g. +919876543211 / 987654).
-            Real numbers fail on localhost even with test mode off.
-          </p>
-        ) : null}
-      </div>
-
-      {error ? (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-          {error}
-        </div>
-      ) : null}
-
-      {success ? (
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-600">
-          {success}
-        </div>
-      ) : null}
-
-      <div id="recaptcha-container" />
-
-      {!confirmationResult ? (
-        <form onSubmit={(e) => void handleSendOtp(e)} className="space-y-4">
-          <div>
-            <label
-              htmlFor="phone"
-              className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[#64748B]"
-            >
-              Phone Number
-            </label>
-            <input
-              id="phone"
-              type="tel"
-              placeholder="+880 1XXX-XXXXXX or +1 234-567-8901"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              disabled={loading || disabled}
-              required
-              className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-[#1A1A2E] shadow-sm transition placeholder:text-[#94A3B8] focus:border-[#0A7EA4] focus:outline-none focus:ring-2 focus:ring-[#0A7EA4]/20"
-            />
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="gap-0 overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white p-0 sm:max-w-[440px]">
+        <DialogHeader className="border-b border-[#F1F5F9] px-6 pb-4 pt-6 text-left">
+          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0A7EA4]/10">
+            <FiPhone className="h-5 w-5 text-[#0A7EA4]" />
           </div>
+          <DialogTitle className="text-[18px] font-bold text-[#1A1A2E]">
+            {confirmationResult ? "Enter verification code" : "Add phone number"}
+          </DialogTitle>
+          <DialogDescription className="text-[13px] leading-relaxed text-[#64748B]">
+            {confirmationResult
+              ? `We sent a 6-digit code to ${phoneNumber ?? "your phone"}.`
+              : "Select your country, enter your mobile number, and we will send a one-time SMS code."}
+          </DialogDescription>
+          {testMode && !confirmationResult ? (
+            <p className="pt-1 text-xs text-amber-700">
+              Test mode: use fictional numbers from Firebase Console (e.g. +919876543211 / 987654).
+            </p>
+          ) : null}
+        </DialogHeader>
 
-          <button
-            type="submit"
-            disabled={loading || disabled}
-            className="w-full rounded-xl bg-[#0A7EA4] px-4 py-3 font-medium text-white shadow-md transition hover:bg-[#086a8a] focus:outline-none focus:ring-2 focus:ring-[#0A7EA4]/50 disabled:opacity-50"
-          >
-            {loading ? "Processing request..." : "Verify Now"}
-          </button>
-        </form>
-      ) : (
-        <form onSubmit={(e) => void handleVerifyOtp(e)} className="space-y-4">
-          <div>
-            <label
-              htmlFor="otp"
-              className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[#64748B]"
-            >
-              One-Time Security Code
-            </label>
-            <input
-              id="otp"
-              type="text"
-              maxLength={6}
-              placeholder="6-Digit Code"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              disabled={loading || disabled}
-              required
-              className="w-full rounded-xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-center text-lg font-bold tracking-[0.5em] text-[#1A1A2E] shadow-sm transition placeholder:text-[#94A3B8] focus:border-[#0A7EA4] focus:outline-none focus:ring-2 focus:ring-[#0A7EA4]/20"
-            />
-          </div>
+        <div className="px-6 py-5">
+          {error ? (
+            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+              {error}
+            </div>
+          ) : null}
 
-          <button
-            type="submit"
-            disabled={loading || disabled}
-            className="w-full rounded-xl bg-emerald-600 px-4 py-3 font-medium text-white shadow-md transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50"
-          >
-            {loading ? "Confirming authorization..." : "Confirm Code"}
-          </button>
+          {success ? (
+            <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-600">
+              {success}
+            </div>
+          ) : null}
 
-          <button
-            type="button"
-            onClick={handleChangeNumber}
-            disabled={loading}
-            className="mt-2 block w-full text-center text-xs font-medium text-[#64748B] transition hover:text-[#1A1A2E] disabled:opacity-50"
-          >
-            ← Change phone number
-          </button>
-        </form>
-      )}
-    </div>
+          <div ref={recaptchaContainerRef} id="recaptcha-container" />
+
+          {!confirmationResult ? (
+            <form onSubmit={(e) => void handleSendOtp(e)} className="space-y-5">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+                  Phone Number
+                </label>
+                <PhoneInput
+                  international={false}
+                  limitMaxLength
+                  country={country}
+                  defaultCountry={defaultCountry}
+                  countryCallingCodeEditable={false}
+                  countrySelectComponent={PhoneCountrySelect}
+                  inputComponent={PhoneNumberInput}
+                  value={phoneNumber}
+                  onChange={setPhoneNumber}
+                  onCountryChange={(next) => {
+                    setCountry(next);
+                    setPhoneNumber(undefined);
+                    setPhoneTouched(false);
+                  }}
+                  disabled={loading || disabled}
+                  placeholder="Mobile number"
+                  className="flex w-full items-center gap-2"
+                  numberInputProps={{
+                    autoComplete: "tel-national",
+                    inputMode: "numeric",
+                    onBlur: () => setPhoneTouched(true),
+                    "aria-invalid": Boolean(phoneFieldError),
+                    className: cn(
+                      phoneFieldError &&
+                        "border-red-400 focus:border-red-400 focus:ring-red-400/20"
+                    ),
+                  }}
+                />
+                {phoneFormatHint ? (
+                  <p className="mt-1.5 text-xs text-[#94A3B8]">{phoneFormatHint}</p>
+                ) : null}
+                {phoneFieldError ? (
+                  <p className="mt-1.5 text-xs text-red-600">{phoneFieldError}</p>
+                ) : null}
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || disabled || !canSendOtp}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0A7EA4] px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-[#086a8a] disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <FiLoader className="h-4 w-4 animate-spin" />
+                    Sending code...
+                  </>
+                ) : (
+                  "Send verification code"
+                )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={(e) => void handleVerifyOtp(e)} className="space-y-5">
+              <div className="flex flex-col items-center gap-4">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B]">
+                  One-time code
+                </label>
+                <InputOTP
+                  maxLength={6}
+                  value={otp}
+                  onChange={setOtp}
+                  disabled={loading || disabled}
+                  containerClassName="justify-center"
+                >
+                  <InputOTPGroup className="gap-2">
+                    {Array.from({ length: 6 }, (_, i) => (
+                      <InputOTPSlot
+                        key={i}
+                        index={i}
+                        className="h-12 w-11 rounded-xl border-[#E2E8F0] bg-white text-base font-bold text-[#1A1A2E] shadow-sm first:rounded-xl last:rounded-xl data-[active=true]:border-[#0A7EA4] data-[active=true]:ring-2 data-[active=true]:ring-[#0A7EA4]/20"
+                      />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+                <p className="text-center text-xs text-[#94A3B8]">
+                  Enter the 6-digit code from your SMS message
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || disabled || otp.length !== 6}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <FiLoader className="h-4 w-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify code"
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleChangeNumber}
+                disabled={loading}
+                className="block w-full text-center text-xs font-medium text-[#64748B] transition hover:text-[#1A1A2E] disabled:opacity-50"
+              >
+                Change phone number
+              </button>
+            </form>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
