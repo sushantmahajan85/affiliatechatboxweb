@@ -21,6 +21,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { FiLoader, FiPhone } from "react-icons/fi";
 import PhoneInput from "react-phone-number-input";
 import type { Country, Value as E164Number } from "react-phone-number-input";
@@ -112,11 +113,21 @@ function setupRecaptchaVerifier(
     },
   });
 
-  void window.recaptchaVerifier.render().then((widgetId) => {
-    window.recaptchaWidgetId = widgetId;
-  });
-
   return window.recaptchaVerifier;
+}
+
+async function ensureRecaptchaRendered(
+  container: HTMLElement | null,
+  onExpired: () => void
+): Promise<RecaptchaVerifier> {
+  let verifier = window.recaptchaVerifier ?? setupRecaptchaVerifier(container, onExpired);
+  if (!verifier) {
+    throw new Error("reCAPTCHA is not ready. Close and reopen this dialog.");
+  }
+
+  const widgetId = await verifier.render();
+  window.recaptchaWidgetId = widgetId;
+  return verifier;
 }
 
 function resetModalState(
@@ -157,16 +168,19 @@ export function PhoneVerificationModal({
   const phoneFormatHint = getPhoneFormatHint(country);
   const canSendOtp = Boolean(phoneNumber) && !phoneFieldError;
 
-  const initRecaptcha = () =>
-    setupRecaptchaVerifier(recaptchaContainerRef.current, () => {
-      setError("reCAPTCHA verification expired. Please try again.");
-      resetRecaptchaPerFirebaseDocs();
-    });
+  const onRecaptchaExpired = () => {
+    setError("reCAPTCHA verification expired. Please try again.");
+    resetRecaptchaPerFirebaseDocs();
+  };
 
   useLayoutEffect(() => {
     if (!open) return;
 
-    initRecaptcha();
+    void ensureRecaptchaRendered(recaptchaContainerRef.current, onRecaptchaExpired).catch(
+      (err: unknown) => {
+        console.error("reCAPTCHA init failed:", err);
+      }
+    );
 
     return () => {
       destroyRecaptchaVerifier(recaptchaContainerRef.current);
@@ -213,10 +227,10 @@ export function PhoneVerificationModal({
     }
 
     try {
-      let appVerifier = window.recaptchaVerifier ?? initRecaptcha();
-      if (!appVerifier) {
-        throw new Error("reCAPTCHA is not ready. Close and reopen this dialog.");
-      }
+      const appVerifier = await ensureRecaptchaRendered(
+        recaptchaContainerRef.current,
+        onRecaptchaExpired
+      );
 
       const confirmation = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
       setConfirmationResult(confirmation);
@@ -227,7 +241,8 @@ export function PhoneVerificationModal({
       setError(caught.message || "Failed to send OTP. Check the number and try again.");
 
       resetRecaptchaPerFirebaseDocs();
-      initRecaptcha();
+      destroyRecaptchaVerifier(recaptchaContainerRef.current);
+      await ensureRecaptchaRendered(recaptchaContainerRef.current, onRecaptchaExpired);
     } finally {
       setLoading(false);
     }
@@ -302,10 +317,25 @@ export function PhoneVerificationModal({
     setError("");
     setSuccess("");
     setConfirmationResult(null);
-    initRecaptcha();
+    void ensureRecaptchaRendered(recaptchaContainerRef.current, onRecaptchaExpired);
   };
 
+  const recaptchaHost =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={recaptchaContainerRef}
+            id="recaptcha-container"
+            className="pointer-events-none fixed left-0 top-0 -z-10 h-px w-px overflow-hidden opacity-0"
+            aria-hidden
+          />,
+          document.body
+        )
+      : null;
+
   return (
+    <>
+    {recaptchaHost}
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="gap-0 overflow-hidden rounded-[24px] border border-[#E2E8F0] bg-white p-0 sm:max-w-[440px]">
         <DialogHeader className="border-b border-[#F1F5F9] px-6 pb-4 pt-6 text-left">
@@ -339,8 +369,6 @@ export function PhoneVerificationModal({
               {success}
             </div>
           ) : null}
-
-          <div ref={recaptchaContainerRef} id="recaptcha-container" />
 
           {!confirmationResult ? (
             <form onSubmit={(e) => void handleSendOtp(e)} className="space-y-5">
@@ -456,5 +484,6 @@ export function PhoneVerificationModal({
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
