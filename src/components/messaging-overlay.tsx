@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 import { 
   X, CheckCheck, Search,
@@ -529,8 +529,6 @@ export function MessagingOverlay() {
   const { recentChats, inboxReady } = useInboxPreviewChats();
 
   const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
-  const pathname = usePathname();
-  const isHomePage = pathname === "/";
 
   useEffect(() => {
     for (const c of activeChats) {
@@ -578,14 +576,11 @@ export function MessagingOverlay() {
         lastUnreadCountRef.current[chat.id] = chat.unreadCount;
     });
 
-    if (hasNewMessage && isHomePage) {
+    if (hasNewMessage) {
         const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
         audio.play().catch(() => undefined);
     }
-  }, [recentChats, activeChats, dispatch, isHomePage, inboxReady, canUseMessaging]);
-
-  // Only show messaging overlay on home page per user request
-  if (!isHomePage) return null;
+  }, [recentChats, activeChats, dispatch, inboxReady, canUseMessaging]);
 
   return (
     <>

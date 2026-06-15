@@ -13,6 +13,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal, openConnectionModal } from "@/store/uiSlice";
 import { getPostTypeLabel, isGeneralPostType } from "@/lib/post-tags";
@@ -46,18 +56,14 @@ import { toast } from "sonner";
 import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
 import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
-import { useGetPostByIdQuery } from "@/store/endpoints/posts";
+import { useGetPostByIdQuery, useBumpPostMutation, useDeletePostMutation } from "@/store/endpoints/posts";
 import clsx from "clsx";
-import { formatDistanceToNow } from "date-fns";
 import { CountryFlag } from "@/components/country-flag";
 import {
   ReportPostDialog,
   type ReportPostTarget,
 } from "@/components/report-post-dialog";
-import {
-  EditPostDialog,
-  type EditablePost,
-} from "@/components/edit-post-dialog";
+import { canBumpPost, formatPostAge } from "@/lib/post-bump";
 
 export function PostDetailsPage() {
   const { id } = useParams();
@@ -68,7 +74,10 @@ export function PostDetailsPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportPostTarget | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [bumpOpen, setBumpOpen] = useState(false);
+  const [deletePost, { isLoading: isDeletingPost }] = useDeletePostMutation();
+  const [bumpPost, { isLoading: isBumpingPost }] = useBumpPostMutation();
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
 
@@ -96,6 +105,57 @@ export function PostDetailsPage() {
       postUserName: data.post.userName || "Unknown",
     });
     setReportOpen(true);
+  };
+
+  const openDeleteDialog = () => {
+    if (!isAuthenticated || !currentUser) {
+      dispatch(openAuthModal());
+      return;
+    }
+    setDeleteOpen(true);
+  };
+
+  const openBumpDialog = () => {
+    if (!isAuthenticated || !currentUser) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (!data?.post || !canBumpPost(data.post)) {
+      toast.error("You can't bump the post before 24 hours");
+      return;
+    }
+    setBumpOpen(true);
+  };
+
+  const handleDeletePost = async () => {
+    if (!data?.post) return;
+    try {
+      await deletePost(data.post._id).unwrap();
+      toast.success("Post deleted successfully");
+      setDeleteOpen(false);
+      router.push("/");
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "data" in err
+          ? String((err as { data?: { message?: string } }).data?.message || "Failed to delete post")
+          : "Failed to delete post";
+      toast.error(message);
+    }
+  };
+
+  const handleBumpPost = async () => {
+    if (!data?.post) return;
+    try {
+      await bumpPost(data.post._id).unwrap();
+      toast.success("Post bumped successfully");
+      setBumpOpen(false);
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "data" in err
+          ? String((err as { data?: { message?: string } }).data?.message || "Failed to bump post")
+          : "Failed to bump post";
+      toast.error(message);
+    }
   };
 
   const handleStartChat = () => {
@@ -218,12 +278,20 @@ const renderContent = (text: string) => {
                 View Profile
               </DropdownMenuItem>
               {isOwner && (
-                <DropdownMenuItem
-                  onClick={() => setEditOpen(true)}
-                  className="cursor-pointer"
-                >
-                  Edit Post
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem
+                    onClick={openBumpDialog}
+                    className="cursor-pointer"
+                  >
+                    Bump up
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={openDeleteDialog}
+                    className="cursor-pointer text-red-600 focus:text-red-600"
+                  >
+                    Delete Post
+                  </DropdownMenuItem>
+                </>
               )}
               {!isOwner && (
                 <DropdownMenuItem
@@ -273,7 +341,7 @@ const renderContent = (text: string) => {
                 </div>
               </div>
               <span className="text-[14px] text-[#757575]">
-                {post.BumpTime ? formatDistanceToNow(new Date(post.BumpTime), { addSuffix: true }) : "recently"}
+                {formatPostAge(post)}
               </span>
             </div>
           </div>
@@ -452,11 +520,46 @@ const renderContent = (text: string) => {
       onOpenChange={setReportOpen}
       target={reportTarget}
     />
-    <EditPostDialog
-      open={editOpen}
-      onOpenChange={setEditOpen}
-      post={post as EditablePost}
-    />
+    <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <AlertDialogContent className="bg-white border border-[#E0E0E0]">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Post</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete this post? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeletingPost}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDeletePost}
+            disabled={isDeletingPost}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog open={bumpOpen} onOpenChange={setBumpOpen}>
+      <AlertDialogContent className="bg-white border border-[#E0E0E0]">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Bump Post</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to bump this post to the top of the feed?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isBumpingPost}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleBumpPost}
+            disabled={isBumpingPost}
+            className="bg-[#0A7EA4] hover:bg-[#086a8a]"
+          >
+            Bump
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

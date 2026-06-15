@@ -85,6 +85,13 @@ export const postsApi = api.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { postId }) => [{ type: "Post", id: postId }, "Post"],
     }),
+    deletePost: builder.mutation<any, string>({
+      query: (postId) => ({
+        url: `/api/posts/${postId}/delete_post`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Post"],
+    }),
   }),
   overrideExisting: false,
 });
@@ -102,4 +109,5 @@ export const {
   usePinPostMutation,
   useUnpinPostMutation,
   useEditPostMutation,
+  useDeletePostMutation,
 } = postsApi;

@@ -283,7 +283,7 @@ export function ChatComposer({
             <PopoverContent
               align="end"
               side="top"
-              className="w-[280px] p-2 bg-white border border-[#E0E0E0] shadow-lg"
+              className="z-[200] w-[280px] p-2 bg-white border border-[#E0E0E0] shadow-lg"
             >
               <div className="grid grid-cols-8 gap-0.5 max-h-[200px] overflow-y-auto">
                 {CHAT_EMOJIS.map((emoji) => (

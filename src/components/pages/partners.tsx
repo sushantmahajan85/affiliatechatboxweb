@@ -1,5 +1,10 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import {
+  getPartnerTitle,
+  PartnerDetailDialog,
+  shouldShowPartnerSeeMore,
+} from "@/components/partner-detail-dialog";
 import { useAppInfiniteScroll } from "@/hooks/use-app-infinite-scroll";
 import { Partner, useGetPartnersFeedQuery } from "@/store/endpoints/partners";
 import { AnimatePresence, motion } from "motion/react";
@@ -15,6 +20,13 @@ export function PartnersPage() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [total, setTotal] = useState(0);
+  const [detailPartner, setDetailPartner] = useState<Partner | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const openPartnerDetail = (partner: Partner) => {
+    setDetailPartner(partner);
+    setDetailOpen(true);
+  };
 
   useEffect(() => {
     const timer = setTimeout(() => setSearchQuery(searchInput.trim()), 350);
@@ -99,44 +111,67 @@ export function PartnersPage() {
       {!showInitialLoading && partners.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           <AnimatePresence mode="popLayout">
-            {partners.map((partner) => (
-              <motion.div
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                key={partner._id}
-                className="bg-white rounded-[20px] p-2 shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all group border border-[#F1F5F9] relative overflow-hidden"
-              >
-                <div className="flex items-center justify-between mb-2 w-full">
-                  <div className="flex items-center gap-4 w-100%">
-                    <div className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold shrink-0 overflow-hidden shadow-sm bg-[#F1F5F9]">
+            {partners.map((partner) => {
+              const title = getPartnerTitle(partner);
+              const showSeeMore = shouldShowPartnerSeeMore(partner.description);
+
+              return (
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  key={partner._id}
+                  className="bg-white rounded-[20px] p-4 shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col min-h-[220px] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all group border border-[#F1F5F9]"
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm bg-[#F1F5F9] border border-[#E2E8F0]">
                       <ImageWithFallback
                         src={partner.logo}
-                        alt={partner.name || "Partner"}
+                        alt={title}
                         className="w-full h-full object-cover"
                       />
                     </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[14px] font-bold text-[#1A1A2E] leading-snug line-clamp-2">
+                        {title}
+                      </h3>
+                      {partner.type ? (
+                        <p className="text-[10px] text-[#0A7EA4] font-bold uppercase tracking-wider mt-1">
+                          {partner.type}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-4 mb-8 text-center sm:text-left">
-                  <p className="text-[12px] text-[#64748B] h-[60px] overflow-hidden">
-                    {partner.description}
-                  </p>
-                </div>
+                  <div className="flex-1 mb-4">
+                    <p className="text-[13px] text-[#64748B] leading-relaxed line-clamp-4">
+                      {partner.description || "No description available."}
+                    </p>
+                    {showSeeMore ? (
+                      <button
+                        type="button"
+                        onClick={() => openPartnerDetail(partner)}
+                        className="mt-2 text-[12px] font-semibold text-[#0A7EA4] hover:text-[#086a8a] transition-colors"
+                      >
+                        See more
+                      </button>
+                    ) : null}
+                  </div>
 
-                <div className="mt-auto">
-                  <button
-                    onClick={() => window.open(partner.link, "_blank")}
-                    className="w-full h-10 bg-[#F8FAFC] text-[#1A1A1A] rounded-xl text-[12px] font-bold hover:bg-[#0A7EA4] hover:text-white transition-all flex items-center justify-center gap-2 border border-[#E2E8F0] hover:border-transparent group/btn shadow-sm active:scale-[0.98]"
-                  >
-                    <Handshake className="w-4 h-4 group-hover/btn:animate-pulse" />
-                    <span>{partner.btntext || "Connect Partner"}</span>
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                  <div className="mt-auto flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => window.open(partner.link, "_blank", "noopener,noreferrer")}
+                      className="w-full h-10 bg-[#F8FAFC] text-[#1A1A1A] rounded-xl text-[12px] font-bold hover:bg-[#0A7EA4] hover:text-white transition-all flex items-center justify-center gap-2 border border-[#E2E8F0] hover:border-transparent group/btn shadow-sm active:scale-[0.98]"
+                    >
+                      <Handshake className="w-4 h-4 group-hover/btn:animate-pulse" />
+                      <span>{partner.btntext || "Connect Partner"}</span>
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}
@@ -156,6 +191,12 @@ export function PartnersPage() {
           <div className="w-6 h-6 border-2 border-[#0A7EA4] border-t-transparent rounded-full animate-spin" />
         )}
       </div>
+
+      <PartnerDetailDialog
+        partner={detailPartner}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </div>
   );
 }

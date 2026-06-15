@@ -12,6 +12,18 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  useBumpPostMutation,
+  useDeletePostMutation,
   useGetAllPostsFeedQuery,
   useGetPinnedPostsQuery,
   useGetUserPostsQuery,
@@ -27,7 +39,6 @@ import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context
 import { getPostTypeLabel, isGeneralPostType } from "@/lib/post-tags";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { PostHashtags } from "@/components/post-hashtags";
-import { formatDistanceToNow } from "date-fns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaThumbtack } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
@@ -37,10 +48,7 @@ import {
   ReportPostDialog,
   type ReportPostTarget,
 } from "@/components/report-post-dialog";
-import {
-  EditPostDialog,
-  type EditablePost,
-} from "@/components/edit-post-dialog";
+import { canBumpPost, formatPostAge } from "@/lib/post-bump";
 
 interface PostFeedProps {
   activeTab: string;
@@ -78,6 +86,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   // Mutations
   const [pinPost] = usePinPostMutation();
   const [unpinPost] = useUnpinPostMutation();
+  const [deletePost, { isLoading: isDeletingPost }] = useDeletePostMutation();
+  const [bumpPost, { isLoading: isBumpingPost }] = useBumpPostMutation();
   
   const chatBackendIsFirebase = useChatBackendIsFirebase();
   const { rooms: firebaseRooms } = useFirebaseChatRoomsContext();
@@ -92,8 +102,15 @@ export function PostFeed({ activeTab }: PostFeedProps) {
   >(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportTarget, setReportTarget] = useState<ReportPostTarget | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<EditablePost | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ _id: string } | null>(null);
+  const [bumpOpen, setBumpOpen] = useState(false);
+  const [bumpTarget, setBumpTarget] = useState<{
+    _id: string;
+    PostCreated?: string;
+    BumpTime?: string | Date;
+    isbumped?: boolean;
+  } | null>(null);
 
   const openReportDialogForPost = (
     post: { userId: string; postContent?: string; userName?: string }
@@ -111,14 +128,65 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     setReportOpen(true);
   };
 
-  const openEditDialogForPost = (post: EditablePost) => {
+  const openDeleteDialogForPost = (post: { _id: string }) => {
     blockCardNavigationRef.current = true;
     if (!isAuthenticated) {
       dispatch(openAuthModal());
       return;
     }
-    setEditTarget(post);
-    setEditOpen(true);
+    setDeleteTarget(post);
+    setDeleteOpen(true);
+  };
+
+  const openBumpDialogForPost = (post: {
+    _id: string;
+    PostCreated?: string;
+    BumpTime?: string | Date;
+    isbumped?: boolean;
+  }) => {
+    blockCardNavigationRef.current = true;
+    if (!isAuthenticated) {
+      dispatch(openAuthModal());
+      return;
+    }
+    if (!canBumpPost(post)) {
+      toast.error("You can't bump the post before 24 hours");
+      return;
+    }
+    setBumpTarget(post);
+    setBumpOpen(true);
+  };
+
+  const handleDeletePost = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deletePost(deleteTarget._id).unwrap();
+      toast.success("Post deleted successfully");
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "data" in err
+          ? String((err as { data?: { message?: string } }).data?.message || "Failed to delete post")
+          : "Failed to delete post";
+      toast.error(message);
+    }
+  };
+
+  const handleBumpPost = async () => {
+    if (!bumpTarget) return;
+    try {
+      await bumpPost(bumpTarget._id).unwrap();
+      toast.success("Post bumped successfully");
+      setBumpOpen(false);
+      setBumpTarget(null);
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === "object" && "data" in err
+          ? String((err as { data?: { message?: string } }).data?.message || "Failed to bump post")
+          : "Failed to bump post";
+      toast.error(message);
+    }
   };
 
   const handleCardClick = (postId: string) => {
@@ -370,7 +438,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                       </div>
                     </div>
                     <span className="text-[12px] text-[#9E9E9E]">
-                      {post.BumpTime ? formatDistanceToNow(new Date(post.BumpTime), { addSuffix: true }) : "recently"}
+                      {formatPostAge(post)}
                     </span>
                   </div>
                 </div>
@@ -410,12 +478,20 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                           View Profile
                         </DropdownMenuItem>
                         {isOwner && (
-                          <DropdownMenuItem
-                            onSelect={() => openEditDialogForPost(post)}
-                            className="cursor-pointer"
-                          >
-                            Edit Post
-                          </DropdownMenuItem>
+                          <>
+                            <DropdownMenuItem
+                              onSelect={() => openBumpDialogForPost(post)}
+                              className="cursor-pointer"
+                            >
+                              Bump up
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => openDeleteDialogForPost(post)}
+                              className="cursor-pointer text-red-600 focus:text-red-600"
+                            >
+                              Delete Post
+                            </DropdownMenuItem>
+                          </>
                         )}
                         {!isOwner && (
                           <DropdownMenuItem
@@ -486,11 +562,46 @@ export function PostFeed({ activeTab }: PostFeedProps) {
       onOpenChange={setReportOpen}
       target={reportTarget}
     />
-    <EditPostDialog
-      open={editOpen}
-      onOpenChange={setEditOpen}
-      post={editTarget}
-    />
+    <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <AlertDialogContent className="bg-white border border-[#E0E0E0]">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Post</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete this post? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeletingPost}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDeletePost}
+            disabled={isDeletingPost}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    <AlertDialog open={bumpOpen} onOpenChange={setBumpOpen}>
+      <AlertDialogContent className="bg-white border border-[#E0E0E0]">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Bump Post</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to bump this post to the top of the feed?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isBumpingPost}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleBumpPost}
+            disabled={isBumpingPost}
+            className="bg-[#0A7EA4] hover:bg-[#086a8a]"
+          >
+            Bump
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

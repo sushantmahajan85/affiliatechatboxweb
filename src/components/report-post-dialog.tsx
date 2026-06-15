@@ -14,7 +14,6 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
 import {
   useReportUserMutation,
-  useSendReportEmailToAdminMutation,
 } from "@/store/endpoints/members";
 import { FiFlag, FiLoader } from "react-icons/fi";
 import { useState } from "react";
@@ -40,11 +39,7 @@ export function ReportPostDialog({
   const dispatch = useAppDispatch();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
   const [reason, setReason] = useState("");
-  const [reportUser, { isLoading: isReporting }] = useReportUserMutation();
-  const [sendReportEmail, { isLoading: isEmailing }] =
-    useSendReportEmailToAdminMutation();
-
-  const isSubmitting = isReporting || isEmailing;
+  const [reportUser, { isLoading: isSubmitting }] = useReportUserMutation();
 
   const handleOpenChange = (next: boolean) => {
     if (!next) setReason("");
@@ -69,26 +64,13 @@ export function ReportPostDialog({
       return;
     }
 
-    const reporterName =
-      `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email || "User";
-
     try {
       await reportUser({
         reporterId: String(user._id),
         reportedId: String(target.postAuthorUserId),
         reason: trimmed,
+        postContent: target.postContent || "",
       }).unwrap();
-
-      try {
-        await sendReportEmail({
-          reporterName,
-          postContent: target.postContent || "",
-          postUserName: target.postUserName || "Unknown",
-          reportReason: trimmed,
-        }).unwrap();
-      } catch {
-        // Same as app: report is saved even if admin email fails
-      }
 
       toast.success("Post reported to admin.");
       handleOpenChange(false);

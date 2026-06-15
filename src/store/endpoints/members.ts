@@ -77,7 +77,12 @@ export const membersApi = api.injectEndpoints({
     }),
     reportUser: builder.mutation<
       { message: string },
-      { reporterId: string; reportedId: string; reason: string }
+      {
+        reporterId: string;
+        reportedId: string;
+        reason: string;
+        postContent?: string;
+      }
     >({
       query: (body) => ({
         url: "/api/users/reportuser",
