@@ -4,7 +4,10 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { CountryFlag } from "@/components/country-flag";
 import { useAppInfiniteScroll } from "@/hooks/use-app-infinite-scroll";
 import { countryLabelFromFlag } from "@/lib/country-flag";
-import { useGetMembersDirectoryFeedQuery } from "@/store/endpoints/members";
+import {
+  useGetMembersDirectoryFeedQuery,
+  useGetProfessionalStatsQuery,
+} from "@/store/endpoints/members";
 import { MessageCircle, Search } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
@@ -88,6 +91,7 @@ export function DirectoryPage() {
     setTotal(0);
   }, [searchQuery]);
 
+  const { data: statsData } = useGetProfessionalStatsQuery();
   const { data, isLoading, isFetching, isError } = useGetMembersDirectoryFeedQuery({
     page,
     limit: PAGE_SIZE,
@@ -175,7 +179,7 @@ export function DirectoryPage() {
           <div>
             <h1 className="text-[24px] font-bold text-[#1A1A2E]">Members Directory</h1>
             <p className="text-[#757575] text-[14px]">
-              Connect with {total > 0 ? total : members.length} professionals globally
+              Connect with {statsData?.total ?? (total > 0 ? total : members.length)} professionals globally
             </p>
           </div>
           <div className="relative w-full md:w-[320px]">
