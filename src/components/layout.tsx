@@ -9,6 +9,7 @@ import { Sidebar } from "./sidebar";
 import { ConnectionRequestModal } from "./connection-request-modal";
 import { DesktopNotificationBridge } from "./desktop-notification-bridge";
 import { GuestRouteGuard } from "./guest-route-guard";
+import { AppWalkthrough } from "./app-walkthrough";
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -48,6 +49,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
           <AuthModal />
           <ConnectionRequestModal />
+          <AppWalkthrough />
           {isAuthenticated && <DesktopNotificationBridge />}
 
           {/* Mobile Overlays */}

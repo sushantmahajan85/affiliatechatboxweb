@@ -5,6 +5,7 @@ interface UIState {
   authView: 'login' | 'otp' | 'verify-email';
   isConnectionModalOpen: boolean;
   connectionTargetId: string | null;
+  isWalkthroughOpen: boolean;
 }
 
 const initialState: UIState = {
@@ -12,6 +13,7 @@ const initialState: UIState = {
   authView: 'login',
   isConnectionModalOpen: false,
   connectionTargetId: null,
+  isWalkthroughOpen: false,
 };
 
 const uiSlice = createSlice({
@@ -36,8 +38,22 @@ const uiSlice = createSlice({
       state.isConnectionModalOpen = false;
       state.connectionTargetId = null;
     },
+    openWalkthrough: (state) => {
+      state.isWalkthroughOpen = true;
+    },
+    closeWalkthrough: (state) => {
+      state.isWalkthroughOpen = false;
+    },
   },
 });
 
-export const { openAuthModal, closeAuthModal, setAuthView, openConnectionModal, closeConnectionModal } = uiSlice.actions;
+export const {
+  openAuthModal,
+  closeAuthModal,
+  setAuthView,
+  openConnectionModal,
+  closeConnectionModal,
+  openWalkthrough,
+  closeWalkthrough,
+} = uiSlice.actions;
 export default uiSlice.reducer;

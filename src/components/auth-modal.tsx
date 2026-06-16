@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
-import { closeAuthModal, setAuthView } from "@/store/uiSlice";
+import { closeAuthModal, setAuthView, openWalkthrough } from "@/store/uiSlice";
 import { 
   useGoogleLoginMutation, 
   useLinkedinLoginMutation, 
@@ -80,6 +80,7 @@ export function AuthModal() {
           dispatch(setAuthView('verify-email'));
         } else {
           dispatch(closeAuthModal());
+          dispatch(openWalkthrough());
         }
       } catch (err: any) {
         setError(err?.data?.message || "Google Sign-In failed");

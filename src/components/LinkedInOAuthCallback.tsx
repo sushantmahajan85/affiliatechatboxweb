@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
+import { openWalkthrough } from "@/store/uiSlice";
 import { getApiBaseUrl } from "@/lib/api-base-url";
 
 const LINKEDIN_CALLBACK_PATH = "/auth/linkedin/callback";
@@ -58,6 +59,7 @@ export function LinkedInOAuthCallback({
         const data = await res.json();
         if (data?.user) {
           dispatch(setCredentials({ user: data.user, token: token! }));
+          dispatch(openWalkthrough());
         }
       } catch (e) {
         console.error("LinkedIn OAuth callback sync failed:", e);
