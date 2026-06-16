@@ -114,8 +114,6 @@ const emailTemplates: EmailTemplate[] = [
       { key: "userName", label: "Recipient Name", default: "Sarah" },
       { key: "description", label: "Description", default: "Acme Affiliate Network — premium offers in health & wellness." },
       { key: "link", label: "Partner Link", default: "https://acme-affiliates.com" },
-      { key: "btntext", label: "Button Label", default: "Visit Partner" },
-      { key: "logo", label: "Logo URL", default: "https://affiliatechatbox.com/logo.png" },
     ],
     html: (v) => `
       <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;">
@@ -123,15 +121,15 @@ const emailTemplates: EmailTemplate[] = [
           <h1 style="color:#fff;margin:0;font-size:22px;">New Partner on Affiliate Chat Box</h1>
         </div>
         <div style="padding:32px;background:#fff;">
-          <p style="font-size:16px;color:#333;">Hello <strong>${v.userName || "there"}</strong>,</p>
-          <p style="font-size:15px;color:#555;">A new business partner has been added to Affiliate Chat Box.</p>
-          <div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #0A7EA4;border-radius:4px;">
-            <p style="margin:0 0 8px;color:#333;"><strong>Description:</strong> ${v.description || "—"}</p>
-            <p style="margin:0 0 8px;color:#333;"><strong>Link:</strong> <a href="${v.link || "https://affiliatechatbox.com/partners"}" style="color:#0A7EA4;">${v.link || "https://affiliatechatbox.com/partners"}</a></p>
-            ${v.btntext ? `<p style="margin:0 0 8px;color:#333;"><strong>Button label:</strong> ${v.btntext}</p>` : ""}
-            ${v.logo ? `<p style="margin:0;color:#333;"><strong>Logo:</strong> <a href="${v.logo}" style="color:#0A7EA4;">View logo</a></p>` : ""}
+          <p style="font-size:16px;color:#333;margin:0 0 8px;">Hello <strong>${v.userName || "there"}</strong>,</p>
+          <p style="font-size:15px;color:#555;margin:0 0 24px;">A new business partner has been added to Affiliate Chat Box.</p>
+          <div style="margin:0 0 28px;padding:24px;background:#f8fafc;border:1px solid #e8edf2;border-radius:8px;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#0A7EA4;">Description</p>
+            <p style="margin:0 0 20px;font-size:16px;line-height:1.65;color:#374151;">${v.description || "—"}</p>
+            <p style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#0A7EA4;">Link</p>
+            <a href="${v.link || "https://affiliatechatbox.com/partners"}" style="font-size:15px;line-height:1.5;color:#0A7EA4;font-weight:600;text-decoration:underline;word-break:break-all;">${v.link || "https://affiliatechatbox.com/partners"}</a>
           </div>
-          <div style="text-align:center;margin-top:28px;">
+          <div style="text-align:center;">
             <a href="https://affiliatechatbox.com/partners" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View Partners</a>
           </div>
         </div>

@@ -95,15 +95,15 @@ const templates = [
           <h1 style="color:#fff;margin:0;font-size:22px;">New Partner on Affiliate Chat Box</h1>
         </div>
         <div style="padding:32px;background:#fff;">
-          <p style="font-size:16px;color:#333;">Hello <strong>Sarah</strong>,</p>
-          <p style="font-size:15px;color:#555;">A new business partner has been added to Affiliate Chat Box.</p>
-          <div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #0A7EA4;border-radius:4px;">
-            <p style="margin:0 0 8px;color:#333;"><strong>Description:</strong> Acme Affiliate Network — premium offers in health &amp; wellness.</p>
-            <p style="margin:0 0 8px;color:#333;"><strong>Link:</strong> <a href="https://acme-affiliates.com" style="color:#0A7EA4;">https://acme-affiliates.com</a></p>
-            <p style="margin:0 0 8px;color:#333;"><strong>Button label:</strong> Visit Partner</p>
-            <p style="margin:0;color:#333;"><strong>Logo:</strong> <a href="https://affiliatechatbox.com/logo.png" style="color:#0A7EA4;">View logo</a></p>
+          <p style="font-size:16px;color:#333;margin:0 0 8px;">Hello <strong>Sarah</strong>,</p>
+          <p style="font-size:15px;color:#555;margin:0 0 24px;">A new business partner has been added to Affiliate Chat Box.</p>
+          <div style="margin:0 0 28px;padding:24px;background:#f8fafc;border:1px solid #e8edf2;border-radius:8px;">
+            <p style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#0A7EA4;">Description</p>
+            <p style="margin:0 0 20px;font-size:16px;line-height:1.65;color:#374151;">Acme Affiliate Network — premium offers in health &amp; wellness.</p>
+            <p style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#0A7EA4;">Link</p>
+            <a href="https://acme-affiliates.com" style="font-size:15px;line-height:1.5;color:#0A7EA4;font-weight:600;text-decoration:underline;word-break:break-all;">https://acme-affiliates.com</a>
           </div>
-          <div style="text-align:center;margin-top:28px;">
+          <div style="text-align:center;">
             <a href="https://affiliatechatbox.com/partners" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View Partners</a>
           </div>
         </div>
@@ -111,7 +111,7 @@ const templates = [
           ${emailPreferencesFooterHtml()}
         </div>
       </div>`,
-    variables: ["userName (firstName)", "description", "link", "btntext", "logo"],
+    variables: ["userName (firstName)", "description", "link"],
   },
   {
     id: "new_post_admin",
