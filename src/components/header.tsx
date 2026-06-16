@@ -199,7 +199,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
         <button 
           onClick={onPartnersClick}
           className="xl:hidden p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors relative"
-          aria-label="Open partners panel"
+          aria-label="Toggle partners panel"
         >
           <PanelRightOpen className="w-6 h-6" />
           <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-[#16A34A] rounded-full border-2 border-white"></span>

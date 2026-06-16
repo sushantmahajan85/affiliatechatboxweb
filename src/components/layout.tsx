@@ -24,7 +24,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <Header 
           onMenuClick={() => setIsSidebarOpen(true)} 
-          onPartnersClick={() => setIsPartnersOpen(true)}
+          onPartnersClick={() => setIsPartnersOpen((prev) => !prev)}
         />
         
         <div className="flex-1 flex overflow-hidden relative">

@@ -84,6 +84,36 @@ const templates = [
     variables: ["userName (firstName)", "senderName", "postContent"],
   },
   {
+    id: "new_partner_users",
+    label: "New Partner — All Users",
+    trigger: "POST /api/users/addpartner — fires when admin adds a partner from the admin panel.",
+    subject: "New Partner on Affiliate Chat Box",
+    recipient: "All active users with email notifications enabled",
+    html: `
+      <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;">
+        <div style="background-color:#0A7EA4;padding:24px;text-align:center;">
+          <h1 style="color:#fff;margin:0;font-size:22px;">New Partner on Affiliate Chat Box</h1>
+        </div>
+        <div style="padding:32px;background:#fff;">
+          <p style="font-size:16px;color:#333;">Hello <strong>Sarah</strong>,</p>
+          <p style="font-size:15px;color:#555;">A new business partner has been added to Affiliate Chat Box.</p>
+          <div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #0A7EA4;border-radius:4px;">
+            <p style="margin:0 0 8px;color:#333;"><strong>Description:</strong> Acme Affiliate Network — premium offers in health &amp; wellness.</p>
+            <p style="margin:0 0 8px;color:#333;"><strong>Link:</strong> <a href="https://acme-affiliates.com" style="color:#0A7EA4;">https://acme-affiliates.com</a></p>
+            <p style="margin:0 0 8px;color:#333;"><strong>Button label:</strong> Visit Partner</p>
+            <p style="margin:0;color:#333;"><strong>Logo:</strong> <a href="https://affiliatechatbox.com/logo.png" style="color:#0A7EA4;">View logo</a></p>
+          </div>
+          <div style="text-align:center;margin-top:28px;">
+            <a href="https://affiliatechatbox.com/partners" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View Partners</a>
+          </div>
+        </div>
+        <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
+          ${emailPreferencesFooterHtml()}
+        </div>
+      </div>`,
+    variables: ["userName (firstName)", "description", "link", "btntext", "logo"],
+  },
+  {
     id: "new_post_admin",
     label: "New Post Pending — Admin",
     trigger: "POST /:userId/posts/add_post — fires immediately when any user submits a post, before admin review.",
