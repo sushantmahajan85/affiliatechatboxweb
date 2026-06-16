@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Autoplay, Navigation, Pagination } from "swiper/modules";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -11,37 +11,96 @@ import "swiper/css/navigation";
 import "swiper/css/pagination";
 
 import { useGetPinnedPostsQuery } from "@/store/endpoints/posts";
+import { useAppSelector } from "@/store/hooks";
+import {
+  readFeaturedPostsVisible,
+  writeFeaturedPostsVisible,
+} from "@/lib/featured-posts-preference";
 import { formatDistanceToNow } from "date-fns";
 import { isGeneralPostType } from "@/lib/post-tags";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { FaGoogle } from "react-icons/fa";
 import { GrLinkedin } from "react-icons/gr";
 import { CountryFlag } from "@/components/country-flag";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 export function FeaturedPosts() {
   const router = useRouter();
   const swiperRef = useRef<any>(null);
-  const { data, isLoading } = useGetPinnedPostsQuery();
+  const userId = useAppSelector((state) => state.auth.userId);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    setIsVisible(readFeaturedPostsVisible(userId));
+  }, [userId]);
+
+  const { data, isLoading } = useGetPinnedPostsQuery(undefined, {
+    skip: !isVisible,
+  });
 
   const pinnedPosts = data?.posts || [];
 
+  const toggleVisibility = () => {
+    setIsVisible((prev) => {
+      const next = !prev;
+      writeFeaturedPostsVisible(userId, next);
+      return next;
+    });
+  };
+
+  const header = (
+    <div className="flex items-center justify-between mb-4">
+      <h2 className="text-[20px] font-bold text-[#1A1A2E]">Featured (Pinned) Posts</h2>
+      <button
+        type="button"
+        onClick={toggleVisibility}
+        className="flex items-center gap-1.5 text-[13px] font-semibold text-[#0A7EA4] hover:text-[#086a8a] transition-colors"
+      >
+        {isVisible ? (
+          <>
+            Hide
+            <ChevronUp className="w-4 h-4" />
+          </>
+        ) : (
+          <>
+            Show
+            <ChevronDown className="w-4 h-4" />
+          </>
+        )}
+      </button>
+    </div>
+  );
+
+  if (!isVisible) {
+    return (
+      <div className="bg-white rounded-[14px] border border-[#E0E0E0] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-4">
+        {header}
+      </div>
+    );
+  }
   if (isLoading) {
     return (
-      <div className="h-[180px] bg-white rounded-[14px] flex items-center justify-center animate-pulse">
-        <div className="w-8 h-8 border-2 border-[#0A7EA4] border-t-transparent rounded-full animate-spin" />
+      <div className="relative featured-posts-slider">
+        {header}
+        <div className="h-[180px] bg-white rounded-[14px] flex items-center justify-center animate-pulse">
+          <div className="w-8 h-8 border-2 border-[#0A7EA4] border-t-transparent rounded-full animate-spin" />
+        </div>
       </div>
     );
   }
 
   if (pinnedPosts.length === 0) {
-    return null;
+    return (
+      <div className="bg-white rounded-[14px] border border-[#E0E0E0] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-4">
+        {header}
+        <p className="text-[14px] text-[#757575]">No featured posts right now.</p>
+      </div>
+    );
   }
 
   return (
     <div className="relative featured-posts-slider">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-[20px] font-bold text-[#1A1A2E]">Featured (Pinned) Posts</h2>
-      </div>
+      {header}
 
       <Swiper
         modules={[Navigation, Pagination, Autoplay]}
