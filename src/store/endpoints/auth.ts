@@ -68,6 +68,25 @@ export const authApi = api.injectEndpoints({
       query: (id) => `/api/users/${id}/get_user`,
       providesTags: ['User'],
     }),
+    requestDeleteAccountOtp: builder.mutation<
+      { message: string; maskedEmail?: string },
+      void
+    >({
+      query: () => ({
+        url: '/api/auth/request-delete-account-otp',
+        method: 'POST',
+      }),
+    }),
+    confirmDeleteAccount: builder.mutation<
+      { message: string },
+      { code: string }
+    >({
+      query: (body) => ({
+        url: '/api/auth/confirm-delete-account',
+        method: 'POST',
+        body,
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -81,4 +100,6 @@ export const {
   useFirebasePhoneVerifyMutation,
   useRegisterUserMutation,
   useGetProfileQuery,
+  useRequestDeleteAccountOtpMutation,
+  useConfirmDeleteAccountMutation,
 } = authApi;

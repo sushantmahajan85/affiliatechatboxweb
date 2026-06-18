@@ -1,7 +1,6 @@
 "use client";
 import { clsx } from "clsx";
 import { ChevronRight, Handshake, Sparkles, X } from "lucide-react";
-import { GrLinkedin } from "react-icons/gr";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useGetPartnersQuery } from "@/store/endpoints/partners";
@@ -12,10 +11,6 @@ import {
   shouldShowPartnerSeeMore,
 } from "@/components/partner-detail-dialog";
 import type { Partner } from "@/store/endpoints/partners";
-
-const LINKEDIN_COMMUNITY_URL =
-  process.env.NEXT_PUBLIC_LINKEDIN_COMMUNITY_URL ||
-  "https://www.linkedin.com/company/affiliatechatbox/posts/";
 
 interface PartnersSidebarProps {
   isOpen?: boolean;
@@ -45,10 +40,7 @@ function SidebarPartnerCard({
           />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-[12px] font-bold text-[#1A1A2E] leading-tight line-clamp-1">
-            {title}
-          </h3>
-          <p className="text-[11px] text-[#64748B] leading-snug line-clamp-2 mt-0.5">
+          <p className="text-[11px] text-[#64748B] leading-snug line-clamp-3">
             {partner.description || "No description available."}
           </p>
           {showSeeMore ? (
@@ -93,11 +85,6 @@ export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
     } else {
       router.push("/partners");
     }
-    if (window.innerWidth < 1280) onClose?.();
-  };
-
-  const handleJoinCommunity = () => {
-    window.open(LINKEDIN_COMMUNITY_URL, "_blank", "noopener,noreferrer");
     if (window.innerWidth < 1280) onClose?.();
   };
 
@@ -172,25 +159,6 @@ export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
               <p className="text-[12px] font-semibold text-[#64748B]">No partners yet</p>
             </div>
           )}
-        </div>
-
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={handleJoinCommunity}
-            className="w-full bg-[#0A7EA4] rounded-lg px-3 py-2.5 text-white shadow-[0_4px_12px_rgba(10,126,164,0.2)] flex items-center justify-between group hover:bg-[#086a8a] transition-all active:scale-[0.98]"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                <GrLinkedin className="w-3.5 h-3.5" />
-              </div>
-              <div className="flex flex-col min-w-0 text-left">
-                <span className="text-[12px] font-bold leading-tight">Join Community</span>
-                <span className="text-[10px] opacity-85">Follow on LinkedIn</span>
-              </div>
-            </div>
-            <ChevronRight className="w-3.5 h-3.5 shrink-0 group-hover:translate-x-0.5 transition-transform" />
-          </button>
         </div>
       </div>
 

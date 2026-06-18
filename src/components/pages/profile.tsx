@@ -34,7 +34,8 @@ import {
   FiSave, 
   FiSend, 
   FiShield, 
-  FiUser, 
+  FiTrash2,
+  FiUser,
   FiX 
 } from "react-icons/fi";
 import { 
@@ -53,6 +54,7 @@ import {
   normalizeCountryCode,
 } from "@/lib/country-flag";
 import { PhoneVerificationModal } from "@/components/PhoneVerification";
+import { DeleteAccountModal } from "@/components/delete-account-modal";
 import { isFirebaseConfigured } from "@/lib/firebase-app";
 import { DEFAULT_COUNTRY_ISO, countryOptionsForIso } from "@/lib/phone-countries";
 import { formatPhoneNumberIntl } from "react-phone-number-input";
@@ -92,6 +94,7 @@ export function ProfilePage({ id }: { id?: string }) {
   });
 
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
   const [linkedinGuardReason, setLinkedinGuardReason] = useState<
     "sender_not_verified" | "recipient_not_verified" | null
@@ -955,6 +958,39 @@ export function ProfilePage({ id }: { id?: string }) {
             </div>
           </div>
         </div>
+
+      {isOwnProfile && (
+        <div className="flex flex-col gap-4">
+          <h2 className="text-[15px] font-bold text-[#64748B] uppercase tracking-wider px-2">
+            Danger Zone
+          </h2>
+          <div className="bg-white rounded-[20px] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-red-100">
+            <div className="p-5 sm:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-start gap-4 min-w-0">
+                  <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
+                    <FiTrash2 className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-[#1A1A2E]">Delete account</h3>
+                    <p className="text-[13px] text-[#64748B] mt-1 leading-relaxed">
+                      Permanently remove your profile, posts, and chats. You&apos;ll
+                      need to verify with a code sent to your email.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeleteModalOpen(true)}
+                  className="shrink-0 w-full sm:w-auto px-5 py-2.5 rounded-xl border border-red-200 bg-red-50 text-red-700 text-sm font-bold hover:bg-red-100 transition-colors"
+                >
+                  Delete account
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
     <PhoneVerificationModal
       open={phoneModalOpen}
@@ -978,6 +1014,11 @@ export function ProfilePage({ id }: { id?: string }) {
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}
       reason={linkedinGuardReason}
+    />
+    <DeleteAccountModal
+      open={deleteModalOpen}
+      onOpenChange={setDeleteModalOpen}
+      userEmail={profile.email}
     />
     </>
   );

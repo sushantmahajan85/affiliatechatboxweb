@@ -124,7 +124,7 @@ export function PartnersPage() {
                   key={partner._id}
                   className="bg-white rounded-[20px] p-4 shadow-[0_4px_12px_rgba(0,0,0,0.03)] flex flex-col min-h-[220px] hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)] transition-all group border border-[#F1F5F9]"
                 >
-                  <div className="flex items-start gap-3 mb-3">
+                  <div className="flex items-center gap-3 mb-3">
                     <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 overflow-hidden shadow-sm bg-[#F1F5F9] border border-[#E2E8F0]">
                       <ImageWithFallback
                         src={partner.logo}
@@ -132,16 +132,11 @@ export function PartnersPage() {
                         className="w-full h-full object-cover"
                       />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-[14px] font-bold text-[#1A1A2E] leading-snug line-clamp-2">
-                        {title}
-                      </h3>
-                      {partner.type ? (
-                        <p className="text-[10px] text-[#0A7EA4] font-bold uppercase tracking-wider mt-1">
-                          {partner.type}
-                        </p>
-                      ) : null}
-                    </div>
+                    {partner.type ? (
+                      <p className="text-[10px] text-[#0A7EA4] font-bold uppercase tracking-wider">
+                        {partner.type}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex-1 mb-4">

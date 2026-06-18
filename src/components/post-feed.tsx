@@ -49,6 +49,7 @@ import {
   type ReportPostTarget,
 } from "@/components/report-post-dialog";
 import { canBumpPost, formatPostAge } from "@/lib/post-bump";
+import { getPostApprovalBadge } from "@/lib/post-approval-status";
 
 interface PostFeedProps {
   activeTab: string;
@@ -385,6 +386,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
           const isAdmin = user?.role === "admin";
           const canPin = isAuthenticated && isAdmin;
           const isPinned = pinnedData?.posts?.some((p: any) => p.postId?._id === post._id || p.postId === post._id);
+          const approvalBadge =
+            activeTab === "my" ? getPostApprovalBadge(post) : null;
 
           return (
             <div 
@@ -392,8 +395,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
               onClick={() => handleCardClick(post._id)}
               className="bg-white rounded-[14px] p-4.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col h-full cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-all border border-transparent hover:border-[#E0E0E0] relative"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-start gap-3 min-w-0 flex-1">
                   <div 
                     className="w-11 h-11 rounded-full overflow-hidden shrink-0 border border-[#E0E0E0] cursor-pointer"
                     onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
@@ -404,13 +407,15 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                       className="w-full h-full object-cover" 
                     />
                   </div>
-                  <div className="flex flex-col min-w-0">
+                  <div className="flex flex-col min-w-0 flex-1">
                     <div 
                       className="flex items-center gap-1.5 min-w-0 cursor-pointer group/name"
                       onClick={(e) => { e.stopPropagation(); router.push(`/profile/${post.userId}`); }}
                     >
-                      <span className="text-[14px] font-bold text-[#1A1A2E] truncate group-hover/name:text-[#0A7EA4] transition-colors">{post.userName}</span>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[14px] font-bold text-[#1A1A2E] truncate group-hover/name:text-[#0A7EA4] transition-colors">
+                        {post.userName}
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
                         {post.isGoogleVerified && (
                           <div className="w-3.5 h-3.5 rounded-full flex items-center justify-center" title="Google Verified">
                             <FcGoogle className="w-3 h-3" />
@@ -421,41 +426,47 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                             <GrLinkedin className="w-full h-full text-white" />
                           </div>
                         )}
-                        <CountryFlag flag={post.flag} size={14} className="ml-0.5" />
+                        <CountryFlag flag={post.flag} size={14} />
                         {post.role === "admin" && (
-                          <span className="bg-[#1A1A2E] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-[4px] uppercase tracking-wider border border-white/10 shadow-sm ml-0.5">
+                          <span className="bg-[#1A1A2E] text-white text-[8px] font-bold px-1.5 py-0.5 rounded-[4px] uppercase tracking-wider border border-white/10 shadow-sm">
                             Admin
                           </span>
                         )}
                         {isPinned && (
                           <FaThumbtack className="w-3 h-3 text-[#0A7EA4] rotate-45" title="Pinned" />
                         )}
-                        {post.underApproval && (
-                          <span className="bg-[#FEF3C7] text-[#92400E] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#FDE68A] ml-1 shrink-0">
-                            Pending
-                          </span>
-                        )}
                       </div>
                     </div>
-                    <span className="text-[12px] text-[#9E9E9E]">
-                      {formatPostAge(post)}
-                    </span>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className="text-[12px] text-[#9E9E9E] leading-none">
+                        {formatPostAge(post)}
+                      </span>
+                      {approvalBadge && (
+                        <span
+                          className={clsx(
+                            "text-[10px] font-bold px-2 py-0.5 rounded-full border leading-none",
+                            approvalBadge.className
+                          )}
+                        >
+                          {approvalBadge.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                  <div
-                    className="flex items-center gap-2"
-                    onClick={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    <span className={clsx(
-                      "px-3 py-1 rounded-full text-[11px] font-medium shrink-0 uppercase",
-                      post.tag === "buy" && "bg-[#D1FAE5] text-[#065F46]",
-                      post.tag === "sell" && "bg-[#FEF3C7] text-[#92400E]",
-                      isGeneralPostType(post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
-                    )}>
-                      {getPostTypeLabel(post.tag)}
-                    </span>
-                  
+                <div
+                  className="flex items-center gap-1.5 shrink-0"
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <span className={clsx(
+                    "px-2.5 py-1 rounded-full text-[10px] font-medium shrink-0 uppercase whitespace-nowrap",
+                    post.tag === "buy" && "bg-[#D1FAE5] text-[#065F46]",
+                    post.tag === "sell" && "bg-[#FEF3C7] text-[#92400E]",
+                    isGeneralPostType(post.tag) && "bg-[#E0F2F7] text-[#0A7EA4]"
+                  )}>
+                    {getPostTypeLabel(post.tag)}
+                  </span>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
@@ -518,7 +529,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </div>
+                </div>
               </div>
 
               <p className="text-[14px] text-[#374151] leading-[1.6] mb-2 flex-1 line-clamp-3">

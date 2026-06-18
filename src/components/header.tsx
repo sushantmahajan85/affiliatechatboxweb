@@ -1,5 +1,6 @@
 "use client";
 import { Bell, ChevronDown, LogOut, Menu, MessageSquare, PanelRightOpen, Settings, User } from "lucide-react";
+import { GrLinkedin } from "react-icons/gr";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { ImageWithFallback } from "./figma/ImageWithFallback";
@@ -19,6 +20,10 @@ import {
   useGetUnreadStatusQuery,
   useMarkAllReadMutation
 } from "@/store/endpoints/notifications";
+
+const LINKEDIN_COMMUNITY_URL =
+  process.env.NEXT_PUBLIC_LINKEDIN_COMMUNITY_URL ||
+  "https://www.linkedin.com/company/affiliatechatbox/posts/";
 
 function formatRelativeTime(dateString: string) {
   const date = new Date(dateString);
@@ -103,16 +108,34 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
 
   return (
     <header className="h-[60px] bg-white border-b border-[#E0E0E0] px-4 md:px-6 flex items-center justify-between sticky top-0 z-[100] shrink-0">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 md:gap-4">
         <button 
           onClick={onMenuClick}
           className="md:hidden p-2 text-[#757575] hover:bg-[#F5F5F5] rounded-full transition-colors"
         >
           <Menu className="w-6 h-6" />
         </button>
+        <a
+          href={LINKEDIN_COMMUNITY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Join Community on LinkedIn"
+          className="sm:hidden p-2 text-[#0A7EA4] hover:bg-[#0A7EA4]/10 rounded-full transition-colors shrink-0"
+        >
+          <GrLinkedin className="w-5 h-5" />
+        </a>
+        <a
+          href={LINKEDIN_COMMUNITY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#0A7EA4]/20 bg-[#0A7EA4]/5 text-[#0A7EA4] hover:bg-[#0A7EA4]/10 transition-colors shrink-0"
+        >
+          <GrLinkedin className="w-4 h-4 shrink-0" />
+          <span className="text-[12px] font-bold whitespace-nowrap">Join Community</span>
+        </a>
       </div>
 
-      <div className="flex items-center gap-3 md:gap-6 ml-4">
+      <div className="flex items-center gap-3 md:gap-6">
         <div className="flex items-center gap-3 md:gap-4 border-r border-[#E0E0E0] pr-3 md:pr-6">
           <div className="relative" ref={notificationRef}>
             <button 

@@ -49,17 +49,13 @@ export function PartnerDetailDialog({
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="min-w-0">
-              <DialogTitle className="text-[20px] font-bold text-[#1A1A2E] leading-tight">
-                {title}
-              </DialogTitle>
-              {partner.type ? (
-                <p className="text-[11px] text-[#0A7EA4] font-bold uppercase tracking-wider mt-1">
-                  {partner.type}
-                </p>
-              ) : null}
-            </div>
+            {partner.type ? (
+              <p className="text-[11px] text-[#0A7EA4] font-bold uppercase tracking-wider">
+                {partner.type}
+              </p>
+            ) : null}
           </div>
+          <DialogTitle className="sr-only">{title}</DialogTitle>
           <DialogDescription className="sr-only">
             Full partner details for {title}
           </DialogDescription>
