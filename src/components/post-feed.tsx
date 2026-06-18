@@ -48,6 +48,7 @@ import {
   ReportPostDialog,
   type ReportPostTarget,
 } from "@/components/report-post-dialog";
+import { SharePostDialog } from "@/components/share-post-dialog";
 import { canBumpPost, formatPostAge } from "@/lib/post-bump";
 import { getPostApprovalBadge } from "@/lib/post-approval-status";
 
@@ -112,6 +113,20 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     BumpTime?: string | Date;
     isbumped?: boolean;
   } | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState<{
+    _id: string;
+    postContent: string;
+  } | null>(null);
+
+  const openShareDialogForPost = (post: { _id: string; postContent?: string }) => {
+    blockCardNavigationRef.current = true;
+    setShareTarget({
+      _id: String(post._id),
+      postContent: post.postContent || "",
+    });
+    setShareOpen(true);
+  };
 
   const openReportDialogForPost = (
     post: { userId: string; postContent?: string; userName?: string }
@@ -550,7 +565,10 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                   <span>Start Chat</span>
                 </button>
                 <button 
-                  onClick={(e) => { e.stopPropagation(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openShareDialogForPost(post);
+                  }}
                   className="flex-1 flex items-center justify-center gap-2 h-9 border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[12px] font-medium hover:bg-[#F5F5F5] transition-colors"
                 >
                   <Share2 className="w-4 h-4 text-[#6B7280]" />
@@ -613,6 +631,12 @@ export function PostFeed({ activeTab }: PostFeedProps) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <SharePostDialog
+      open={shareOpen}
+      onOpenChange={setShareOpen}
+      postId={shareTarget?._id || ""}
+      postContent={shareTarget?.postContent || ""}
+    />
     <LinkedinChatGuardDialog
       open={linkedinGuardOpen}
       onOpenChange={setLinkedinGuardOpen}

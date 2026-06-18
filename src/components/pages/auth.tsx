@@ -2,7 +2,7 @@
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { setCredentials } from "@/store/authSlice";
-import { openWalkthrough } from "@/store/uiSlice";
+import { openWalkthroughForNewUser } from "@/lib/walkthrough-preference";
 import {
   useGoogleLoginMutation,
   useLinkedinLoginMutation
@@ -82,7 +82,7 @@ export function AuthPage() {
         
         const response = await googleLogin(payload).unwrap();
         dispatch(setCredentials({ user: response.user, token: response.user.jwttoken }));
-        dispatch(openWalkthrough());
+        openWalkthroughForNewUser(dispatch, response.user._id, Boolean(response.isNewUser));
         router.push("/");
       } catch (err: any) {
         setError(err?.data?.message || "Google Sign-In failed to sync with backend");

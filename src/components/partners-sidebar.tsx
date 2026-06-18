@@ -70,7 +70,7 @@ function SidebarPartnerCard({
 export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
   const router = useRouter();
   const { data, isLoading } = useGetPartnersQuery();
-  const partners = data?.allpartners?.slice(0, 3) || [];
+  const partners = data?.allpartners?.slice(0, 5) || [];
   const [detailPartner, setDetailPartner] = useState<Partner | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -129,7 +129,7 @@ export function PartnersSidebar({ isOpen, onClose }: PartnersSidebarProps) {
 
         <div className="space-y-2">
           {isLoading ? (
-            [1, 2, 3].map((i) => (
+            [1, 2, 3, 4, 5].map((i) => (
               <div
                 key={i}
                 className="rounded-xl border border-[#E8ECF1] bg-white p-2.5 animate-pulse"

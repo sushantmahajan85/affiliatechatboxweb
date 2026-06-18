@@ -5,8 +5,10 @@ function storageKey(userId: string | null | undefined): string {
 }
 
 export function readFeaturedPostsVisible(userId: string | null | undefined): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(storageKey(userId)) === "1";
+  if (typeof window === "undefined") return true;
+  const stored = window.localStorage.getItem(storageKey(userId));
+  if (stored === "0") return false;
+  return true;
 }
 
 export function writeFeaturedPostsVisible(

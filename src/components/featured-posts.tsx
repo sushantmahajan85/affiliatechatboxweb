@@ -28,7 +28,7 @@ export function FeaturedPosts() {
   const router = useRouter();
   const swiperRef = useRef<any>(null);
   const userId = useAppSelector((state) => state.auth.userId);
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     setIsVisible(readFeaturedPostsVisible(userId));

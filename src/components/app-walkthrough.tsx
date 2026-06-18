@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { WALKTHROUGH_STEPS } from "@/lib/app-walkthrough";
+import { markWalkthroughCompleted } from "@/lib/walkthrough-preference";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { closeWalkthrough } from "@/store/uiSlice";
 import { AnimatePresence, motion } from "motion/react";
@@ -34,6 +35,7 @@ const slideVariants = {
 export function AppWalkthrough() {
   const dispatch = useAppDispatch();
   const isOpen = useAppSelector((state) => state.ui.isWalkthroughOpen);
+  const userId = useAppSelector((state) => state.auth.userId);
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
 
@@ -50,10 +52,11 @@ export function AppWalkthrough() {
   }, [isOpen]);
 
   const handleClose = useCallback(() => {
+    markWalkthroughCompleted(userId);
     dispatch(closeWalkthrough());
     setStepIndex(0);
     setDirection(1);
-  }, [dispatch]);
+  }, [dispatch, userId]);
 
   const handleSkip = () => {
     handleClose();
