@@ -69,7 +69,20 @@ export const chatsApi = api.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['Conversations', 'Notifications' as any],
+      invalidatesTags: ['Conversations', 'Notifications'],
+      async onQueryStarted({ userId, partnerId }, { dispatch, queryFulfilled }) {
+        const patchResult = dispatch(
+          chatsApi.util.updateQueryData('getConversations', userId, (draft) => {
+            const conv = draft.conversations.find((c) => String(c.id) === String(partnerId));
+            if (conv) conv.unreadCount = 0;
+          })
+        );
+        try {
+          await queryFulfilled;
+        } catch {
+          patchResult.undo();
+        }
+      },
     }),
   }),
   overrideExisting: false,

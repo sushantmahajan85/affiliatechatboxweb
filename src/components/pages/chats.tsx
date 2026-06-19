@@ -17,6 +17,7 @@ import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation } from "@/store/endpoints/chats";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
+import { useInboxPreviewChats } from "@/hooks/use-inbox-preview-chats";
 import { useAppSelector } from "@/store/hooks";
 import { clsx } from "clsx";
 import { format } from "date-fns";
@@ -112,6 +113,7 @@ export function ChatsPage() {
 
   const useFirestore = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, selectedChatId);
+  const { recentChats: inboxPreviewChats } = useInboxPreviewChats();
 
   const inboxFbRooms = useMemo(() => {
     if (!useFirestore || !fbChat.active) return [];
@@ -122,16 +124,16 @@ export function ChatsPage() {
   const [markAsRead] = useMarkChatAsReadMutation();
   const { data: convData } = useGetConversationsQuery(currentUserId || "", {
     skip: !currentUserId || useFirestore,
-    pollingInterval: 3000 // Poll every 3 seconds
+    pollingInterval: 15000,
   });
 
-  // Fetch real history for selected chat with 3s polling
+  // Fetch real history for selected chat
   const { data: historyData } = useGetChatHistoryQuery({
     userId1: currentUserId || "",
     userId2: String(selectedChatId)
   }, {
     skip: !currentUserId || !selectedChatId || useFirestore,
-    pollingInterval: 3000 // Poll every 3 seconds for real-time history
+    pollingInterval: 15000,
   });
 
   // Fallback profile fetching for when we click from a profile page
@@ -256,7 +258,7 @@ export function ChatsPage() {
 
   const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
     skip: !currentUserId,
-    pollingInterval: 3000 // Poll every 3 seconds
+    pollingInterval: 15000,
   });
 
   // Request gate: Firestore matches Android chat doc; otherwise Mongo notifications + history
@@ -322,19 +324,13 @@ export function ChatsPage() {
     }
   }, [useFirestore, fbChat.active, selectedChatId, currentUserId, markAsRead, isRecipientPending]);
 
-  // Unified list of all conversation partners
+  // Unified list of all conversation partners (shared unread counts with messaging overlay)
   const allConversations = useMemo(() => {
     if (!convData?.conversations) return [];
-    
-    // Map existing conversations and check for unread notifications for each
+
     return convData.conversations
       .filter((c) => !isSelfChatPartner(currentUserId, String(c.id)))
       .map((c) => {
-        const unreadNotifs = notificationsData?.notifs?.filter(n => 
-            n.senderId === c.id && n.type === "chat_request" && !n.isRead
-        ) || [];
-        
-        // Smart time formatting
         let displayTime = "";
         if (c.time) {
             const date = new Date(c.time);
@@ -342,14 +338,17 @@ export function ChatsPage() {
             displayTime = isToday ? format(date, "p") : format(date, "MMM d");
         }
 
+        const preview = inboxPreviewChats.find((p) => String(p.id) === String(c.id));
+
         return {
             ...c,
+            lastMessage: preview?.lastMsg ?? c.lastMessage,
+            unreadCount: preview?.unreadCount ?? c.unreadCount,
             time: displayTime,
-            unreadCount: unreadNotifs.length,
             tab: "messages"
         };
     });
-  }, [convData, notificationsData]);
+  }, [convData, currentUserId, inboxPreviewChats]);
 
   // Requests include:
   // 1. Incoming unread messages/requests (unreadCount > 0)

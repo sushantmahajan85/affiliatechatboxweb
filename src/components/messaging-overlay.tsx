@@ -22,6 +22,7 @@ import { getFirebaseStorage, getFirestoreDb, isFirebaseConfigured } from "@/lib/
 import {
   buildChatRoomId,
   sendFirestoreChatMessage,
+  sendFirestoreAdminMessage,
   isAdminSupportChatPartner,
   uploadFirestoreChatImage,
 } from "@/lib/firebase-chat";
@@ -32,7 +33,7 @@ import {
 } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import { toast } from "sonner";
 import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
 import { openAuthModal } from "@/store/uiSlice";
@@ -46,12 +47,19 @@ type OverlayChatPeer = {
   isRequest?: boolean;
 };
 
+function formatChatListTime(time: string | null | undefined): string {
+  if (!time) return "";
+  const date = new Date(time);
+  if (Number.isNaN(date.getTime())) return "";
+  return isToday(date) ? format(date, "p") : format(date, "MMM d");
+}
+
 function OverlayChatListItem({
   chat,
   isActive,
   onOpen,
 }: {
-  chat: OverlayChatPeer & { lastMsg: string; unreadCount: number };
+  chat: OverlayChatPeer & { lastMsg: string; unreadCount: number; time?: string | null };
   isActive: boolean;
   onOpen: (
     resolvedName: string,
@@ -93,7 +101,7 @@ function OverlayChatListItem({
       <div className="flex flex-col min-w-0 flex-1 border-b border-[#F1F5F9] pb-3 last:border-0">
         <div className="flex items-center justify-between mb-0.5">
           <span className="text-[14px] font-bold text-[#1A1A2E] truncate">{resolvedName}</span>
-          <span className="text-[12px] text-[#666666]">Today</span>
+          <span className="text-[12px] text-[#666666]">{formatChatListTime(chat.time) || "Today"}</span>
         </div>
         <span className="text-[12px] text-[#666666] line-clamp-2 leading-snug">{chat.lastMsg}</span>
       </div>
@@ -155,12 +163,12 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
 
   const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
     skip: !currentUserId || useFb,
-    pollingInterval: 3000
+    pollingInterval: 15000,
   });
 
   const { data: historyData } = useGetChatHistoryQuery(
     { userId1: currentUserId || "", userId2: chat.id },
-    { skip: !currentUserId || !chat.id || useFb, pollingInterval: 3000 }
+    { skip: !currentUserId || !chat.id || useFb, pollingInterval: 15000 }
   );
 
   const [markAsRead] = useMarkChatAsReadMutation();
@@ -240,10 +248,6 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
 
   const validateChatSend = (): boolean => {
     if (!currentUserId || isSenderPending) return false;
-    if (isAdminSupportChatPartner(String(chat.id))) {
-      toast.error("Use Contact Admin for support");
-      return false;
-    }
     if (isSelfChatPartner(currentUserId, chat.id)) {
       toast.error("You cannot chat with yourself");
       return false;
@@ -279,14 +283,25 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
       if (fbChat.active && fbChat.isRecipientPending && fbChat.activeChatRoomId) {
         await fbChat.acceptFirestoreInvite(fbChat.activeChatRoomId);
       }
-      await sendFirestoreChatMessage(db, {
-        currentUserId,
-        receiverId: chat.id,
-        message: payload.message,
-        messageType: payload.messageType,
-        imageUrl: payload.imageUrl,
-        authToken: token ?? undefined,
-      });
+      if (isAdminSupportChatPartner(String(chat.id))) {
+        await sendFirestoreAdminMessage(db, {
+          currentUserId,
+          adminReceiverId: chat.id,
+          message: payload.message,
+          messageType: payload.messageType,
+          imageUrl: payload.imageUrl,
+          authToken: token ?? undefined,
+        });
+      } else {
+        await sendFirestoreChatMessage(db, {
+          currentUserId,
+          receiverId: chat.id,
+          message: payload.message,
+          messageType: payload.messageType,
+          imageUrl: payload.imageUrl,
+          authToken: token ?? undefined,
+        });
+      }
       return true;
     } catch (err) {
       console.error("Failed to send message from popup:", err);
@@ -529,14 +544,6 @@ export function MessagingOverlay() {
   const { recentChats, inboxReady } = useInboxPreviewChats();
 
   const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
-
-  useEffect(() => {
-    for (const c of activeChats) {
-      if (isAdminSupportChatPartner(String(c.id))) {
-        dispatch(closeChat(c.id));
-      }
-    }
-  }, [activeChats, dispatch]);
 
   const visibleChats = useMemo(() => {
     if (activeTab === "requests") return recentChats.filter((c) => c.isRequest);

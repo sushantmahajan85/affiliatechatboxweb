@@ -13,7 +13,7 @@ import {
   X
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import googlePlayQr from "@/imports/qr-code-google-playstore.png";
 import appStoreQr from "@/imports/qr-code-appstore.png";
@@ -57,9 +57,16 @@ import { isAuthRequiredMenuPath } from "@/lib/auth-guard-paths";
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showAppQrModal, setShowAppQrModal] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const pathname = usePathname();
   const dispatch = useAppDispatch();
   const { isAuthenticated } = useAppSelector((state) => state.auth);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  const canAccessProtectedRoutes = hydrated && isAuthenticated;
 
   const handleProtectedNav = () => {
     dispatch(openAuthModal());
@@ -125,7 +132,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 : "text-[#757575] hover:bg-[#F5F5F5]",
             );
 
-            if (requiresAuth && !isAuthenticated) {
+            if (requiresAuth && !canAccessProtectedRoutes) {
               return (
                 <button
                   key={item.path}

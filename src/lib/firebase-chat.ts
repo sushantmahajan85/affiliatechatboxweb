@@ -57,7 +57,7 @@ export interface FirestoreChatRoomRow {
   isBlocked?: boolean;
 }
 
-/** Admin support thread is only listed on `/admin`, not main inbox / overlay. */
+/** Optional filter — admin support is shown in main inbox / overlay (same as Chats tab). */
 export function filterInboxFirestoreRooms(rows: FirestoreChatRoomRow[]): FirestoreChatRoomRow[] {
   return rows.filter((r) => !isAdminSupportChatPartner(r.partnerId));
 }

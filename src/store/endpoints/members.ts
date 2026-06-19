@@ -90,6 +90,7 @@ export const membersApi = api.injectEndpoints({
         body,
       }),
     }),
+    /** @deprecated Web uses reportUser only — that route already emails admin once. */
     sendReportEmailToAdmin: builder.mutation<
       { success: boolean; message: string },
       {

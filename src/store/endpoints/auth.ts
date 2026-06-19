@@ -69,7 +69,7 @@ export const authApi = api.injectEndpoints({
       providesTags: ['User'],
     }),
     requestDeleteAccountOtp: builder.mutation<
-      { message: string; maskedEmail?: string },
+      { message: string; maskedEmail?: string; _devCode?: string },
       void
     >({
       query: () => ({

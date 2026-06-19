@@ -32,6 +32,8 @@ type PhoneVerificationModalProps = {
   appJwt: string;
   defaultCountry?: Country;
   disabled?: boolean;
+  /** add = first-time link; update = change existing verified number */
+  mode?: "add" | "update";
   onVerified?: (phoneE164: string) => void;
   onSuccess?: (user: { jwttoken: string; mobileNumber?: string }) => void;
 };
@@ -150,6 +152,7 @@ export function PhoneVerificationModal({
   appJwt,
   defaultCountry = DEFAULT_COUNTRY_ISO as Country,
   disabled = false,
+  mode = "add",
   onVerified,
   onSuccess,
 }: PhoneVerificationModalProps) {
@@ -333,6 +336,8 @@ export function PhoneVerificationModal({
         )
       : null;
 
+  const isUpdate = mode === "update";
+
   return (
     <>
     {recaptchaHost}
@@ -343,12 +348,18 @@ export function PhoneVerificationModal({
             <FiPhone className="h-5 w-5 text-[#0A7EA4]" />
           </div>
           <DialogTitle className="text-[18px] font-bold text-[#1A1A2E]">
-            {confirmationResult ? "Enter verification code" : "Add phone number"}
+            {confirmationResult
+              ? "Enter verification code"
+              : isUpdate
+                ? "Update phone number"
+                : "Add phone number"}
           </DialogTitle>
           <DialogDescription className="text-[13px] leading-relaxed text-[#64748B]">
             {confirmationResult
               ? `We sent a 6-digit code to ${phoneNumber ?? "your phone"}.`
-              : "Select your country, enter your mobile number, and we will send a one-time SMS code."}
+              : isUpdate
+                ? "Enter your new mobile number. We will send a one-time SMS code to confirm the change."
+                : "Select your country, enter your mobile number, and we will send a one-time SMS code."}
           </DialogDescription>
           {testMode && !confirmationResult ? (
             <p className="pt-1 text-xs text-amber-700">

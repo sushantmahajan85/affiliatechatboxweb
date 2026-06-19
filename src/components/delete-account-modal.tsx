@@ -61,6 +61,7 @@ export function DeleteAccountModal({
   const [step, setStep] = useState<Step>("warning");
   const [otp, setOtp] = useState("");
   const [maskedEmail, setMaskedEmail] = useState<string | null>(null);
+  const [devCode, setDevCode] = useState<string | null>(null);
 
   const [requestOtp, { isLoading: isSending }] = useRequestDeleteAccountOtpMutation();
   const [confirmDelete, { isLoading: isDeleting }] = useConfirmDeleteAccountMutation();
@@ -73,6 +74,7 @@ export function DeleteAccountModal({
       setStep("warning");
       setOtp("");
       setMaskedEmail(null);
+      setDevCode(null);
     }
   }, [open]);
 
@@ -84,8 +86,12 @@ export function DeleteAccountModal({
     try {
       const res = await requestOtp().unwrap();
       setMaskedEmail(res.maskedEmail || null);
+      setDevCode(res._devCode || null);
       setStep("otp");
       toast.success(res.message || "Verification code sent to your email.");
+      if (res._devCode) {
+        toast.info(`Development code: ${res._devCode}`, { duration: 120_000 });
+      }
     } catch (err: unknown) {
       const e = err as { data?: { message?: string } };
       toast.error(e?.data?.message || "Failed to send verification code.");
@@ -237,11 +243,24 @@ export function DeleteAccountModal({
                 <DialogDescription className="text-[13px] leading-relaxed text-[#64748B]">
                   We sent a 6-digit code to{" "}
                   <span className="font-semibold text-[#1A1A2E]">{displayEmail}</span>.
-                  Enter it below to permanently delete your account.
+                  Check your inbox, spam, and promotions folders, then enter the code below.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="px-6 py-5">
+                {devCode && (
+                  <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
+                      Development mode
+                    </p>
+                    <p className="mt-1 text-[13px] text-amber-900">
+                      Email may be delayed. Use this code:{" "}
+                      <span className="font-mono text-base font-bold tracking-widest">
+                        {devCode}
+                      </span>
+                    </p>
+                  </div>
+                )}
                 <div className="flex flex-col items-center gap-4">
                   <label className="block text-xs font-semibold uppercase tracking-wider text-[#64748B]">
                     One-time code

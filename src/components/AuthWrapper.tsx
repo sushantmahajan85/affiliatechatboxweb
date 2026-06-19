@@ -5,10 +5,13 @@ import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { updateUser, logout } from "@/store/authSlice";
 import { getSocket } from "@/lib/socket";
+import { useChatRealtimeSync } from "@/hooks/use-chat-realtime-sync";
 
 export function AuthWrapper({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
   const { userId, token } = useAppSelector((state) => state.auth);
+
+  useChatRealtimeSync();
 
   // Skip query if no userId
   const { data, error, isLoading } = useGetProfileQuery(userId as string, {
@@ -36,8 +39,8 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (error) {
       console.error("Auth error:", error);
-      // If unauthorized, logout
-      if ((error as any).status === 401) {
+      const code = (error as { data?: { code?: string } }).data?.code;
+      if (code === "account_deleted") {
         dispatch(logout());
       }
     }

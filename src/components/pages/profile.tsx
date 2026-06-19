@@ -93,6 +93,8 @@ export function ProfilePage({ id }: { id?: string }) {
     skip: !profileId,
   });
 
+  const isAccountSuspended = Boolean(isOwnProfile && data?.user?.isSuspended);
+
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [linkedinGuardOpen, setLinkedinGuardOpen] = useState(false);
@@ -103,6 +105,10 @@ export function ProfilePage({ id }: { id?: string }) {
   const handleStartChat = () => {
     if (!currentUserId) {
       dispatch(openAuthModal());
+      return;
+    }
+    if (viewerUser?.isSuspended) {
+      toast.error("Your account is suspended");
       return;
     }
     if (isSelfChatPartner(currentUserId, profileId)) {
@@ -212,7 +218,8 @@ export function ProfilePage({ id }: { id?: string }) {
         googleVerified: !!user.isGoogleVerified,
         linkedinVerified: !!user.isLinkedinVerified,
         otpVerified: !!user.iscontactverified,
-        email: user.email || "No email",
+        email:
+          user.email || user.googleemail || user.linkedinemail || "No email",
         phone: user.mobileNumber || "No phone number",
         firstName: user.firstName || "",
         lastName: user.lastName || "",
@@ -242,11 +249,16 @@ export function ProfilePage({ id }: { id?: string }) {
     return formatPhoneNumberIntl(e164) || phone;
   };
 
-  const canAddPhone =
+  const canManagePhone =
     isOwnProfile &&
-    !profile.otpVerified &&
+    !isAccountSuspended &&
     isFirebaseConfigured() &&
     Boolean(appJwt);
+
+  const phoneActionLabel =
+    hasPhoneNumber && profile.otpVerified ? "Update phone number" : "Add phone number";
+  const isPhoneUpdate = hasPhoneNumber && profile.otpVerified;
+  const canOpenPhoneVerification = canManagePhone && !profile.otpVerified;
 
   const onMobilePrivacyChange = async (next: boolean) => {
     if (!currentUserId || mobilePrivacySaving) return;
@@ -349,7 +361,7 @@ export function ProfilePage({ id }: { id?: string }) {
     }
   };
 
-  const canVerifyFromHere = isOwnProfile && Boolean(currentUserId);
+  const canVerifyFromHere = isOwnProfile && Boolean(currentUserId) && !isAccountSuspended;
   const googleRowActive = canVerifyFromHere && !profile.googleVerified;
   const linkedinRowActive = canVerifyFromHere && !profile.linkedinVerified;
 
@@ -385,6 +397,15 @@ export function ProfilePage({ id }: { id?: string }) {
   return (
     <>
     <div className="flex flex-col gap-6 max-w-2xl mx-auto pb-12">
+      {isAccountSuspended && (
+        <div className="rounded-[16px] border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-semibold">Account suspended</p>
+          <p className="mt-1 text-amber-800">
+            Your account has been suspended. You can view your profile but cannot post,
+            message, or edit settings until an admin restores access.
+          </p>
+        </div>
+      )}
       {/* Profile Header Card */}
       <div className="bg-white rounded-[20px] p-6 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[#F1F5F9]">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
@@ -730,13 +751,13 @@ export function ProfilePage({ id }: { id?: string }) {
                       ? displayPhoneNumber(profile.phone)
                       : "Not added"}
                   </span>
-                  {canAddPhone ? (
+                  {canManagePhone ? (
                     <button
                       type="button"
                       onClick={() => setPhoneModalOpen(true)}
                       className="shrink-0 rounded-lg border border-[#0A7EA4]/20 bg-[#0A7EA4]/5 px-3 py-1.5 text-xs font-bold text-[#0A7EA4] transition hover:bg-[#0A7EA4]/10"
                     >
-                      Add phone number
+                      {phoneActionLabel}
                     </button>
                   ) : null}
                 </div>
@@ -767,7 +788,7 @@ export function ProfilePage({ id }: { id?: string }) {
             </div>
           )}
 
-          {isOwnProfile && (
+          {isOwnProfile && !isAccountSuspended && (
             <div className="flex gap-3 pt-4">
               {isEditing ? (
                 <>
@@ -899,20 +920,20 @@ export function ProfilePage({ id }: { id?: string }) {
 
             {/* Mobile / contact verification */}
             <div
-              role={canAddPhone ? "button" : undefined}
-              tabIndex={canAddPhone ? 0 : undefined}
+              role={canOpenPhoneVerification ? "button" : undefined}
+              tabIndex={canOpenPhoneVerification ? 0 : undefined}
               onClick={() => {
-                if (!canAddPhone) return;
+                if (!canOpenPhoneVerification) return;
                 setPhoneModalOpen(true);
               }}
               onKeyDown={(e) => {
-                if (!canAddPhone) return;
+                if (!canOpenPhoneVerification) return;
                 if (e.key !== "Enter" && e.key !== " ") return;
                 e.preventDefault();
                 setPhoneModalOpen(true);
               }}
               className={`p-5 transition-colors ${
-                canAddPhone ? "cursor-pointer hover:bg-[#F8FAFC] group" : "cursor-default"
+                canOpenPhoneVerification ? "cursor-pointer hover:bg-[#F8FAFC] group" : "cursor-default"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -944,7 +965,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   >
                     {profile.otpVerified ? "VERIFIED" : "VERIFY"}
                   </span>
-                  {canAddPhone ? (
+                  {canOpenPhoneVerification ? (
                     <FiChevronRight className="w-5 h-5 text-[#CBD5E1] group-hover:translate-x-1 transition-transform" aria-hidden />
                   ) : null}
                 </div>
@@ -997,13 +1018,14 @@ export function ProfilePage({ id }: { id?: string }) {
       onOpenChange={setPhoneModalOpen}
       appJwt={appJwt || ""}
       defaultCountry={(profile.countryIso || DEFAULT_COUNTRY_ISO) as Country}
+      mode={isPhoneUpdate ? "update" : "add"}
       onVerified={(phoneE164) => {
         setProfile((prev) => ({
           ...prev,
           otpVerified: true,
           phone: phoneE164.replace(/\D/g, "") || phoneE164,
         }));
-        toast.success("Phone number verified.");
+        toast.success(isPhoneUpdate ? "Phone number updated." : "Phone number verified.");
       }}
       onSuccess={(user) => {
         dispatch(setCredentials({ user: user as never, token: user.jwttoken }));
@@ -1018,7 +1040,7 @@ export function ProfilePage({ id }: { id?: string }) {
     <DeleteAccountModal
       open={deleteModalOpen}
       onOpenChange={setDeleteModalOpen}
-      userEmail={profile.email}
+      userEmail={profile.email !== "No email" ? profile.email : undefined}
     />
     </>
   );
