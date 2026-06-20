@@ -1,5 +1,6 @@
 "use client";
 import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { getFirestoreDb, isFirebaseConfigured } from "@/lib/firebase-app";
 import { sendFirestoreChatMessage } from "@/lib/firebase-chat";
@@ -123,7 +124,7 @@ export function ConnectionRequestModal() {
                 <label className="text-xs font-bold text-[#64748B] uppercase">Message (Optional)</label>
                 <textarea
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => sanitizeTextOnChange(e.target.value, setMessage)}
                   placeholder="Ex: Hi, I'd like to join your professional network..."
                   className="w-full min-h-[100px] p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-sm text-[#1A1A1A] placeholder:text-[#94a3b8] focus:outline-none focus:border-[#0A7EA4] focus:ring-1 focus:ring-[#0A7EA4] resize-none transition-all"
                 />

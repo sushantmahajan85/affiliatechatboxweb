@@ -1,5 +1,7 @@
 "use client";
-import { ChatComposer } from "@/components/chat-composer";
+
+import { ChatComposer } from "../chat-composer";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
 import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
@@ -19,8 +21,17 @@ import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMuta
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { useInboxPreviewChats } from "@/hooks/use-inbox-preview-chats";
 import { useAppSelector } from "@/store/hooks";
+import {
+  chatPartnerDisabledMessage,
+  chatPartnerRowClassName,
+  chatPartnerStatusBadge,
+  resolveChatPartnerAccountStatus,
+  type ChatPartnerAccountStatus,
+} from "@/lib/chat-partner-account";
+import { useGetChatPartnerStatusesQuery } from "@/store/endpoints/members";
+import type { ChatPartner } from "@/store/endpoints/chats";
 import { clsx } from "clsx";
-import { format } from "date-fns";
+import { formatChatMessageTime, formatChatTime } from "@/lib/format-chat-time";
 import {
   ArrowLeft,
   CheckCheck,
@@ -30,9 +41,8 @@ import {
   User,
   Video
 } from "lucide-react";
-import { motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { toast } from "sonner";
 
 function FirebaseChatSidebarRow(props: {
@@ -42,47 +52,138 @@ function FirebaseChatSidebarRow(props: {
   unreadCount: number;
   selected: boolean;
   pendingOutgoing: boolean;
+  accountStatus: ChatPartnerAccountStatus;
   onSelect: () => void;
 }) {
-  const { data, isLoading } = useGetProfileQuery(props.partnerId, { skip: !props.partnerId });
+  const skipProfile = !props.partnerId || props.accountStatus.accountDisabled;
+  const { data, isLoading } = useGetProfileQuery(props.partnerId, { skip: skipProfile });
   const u = data?.user;
-  const name = u
-    ? `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email
-    : isLoading
-      ? "…"
-      : `User`;
+  const name =
+    props.accountStatus.displayName ||
+    (u
+      ? `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email
+      : isLoading
+        ? "…"
+        : "User");
   const avatar = resolveUserProfileImageUrl(u, name);
+  const statusBadge = chatPartnerStatusBadge(props.accountStatus.statusLabel);
 
   return (
     <div
       onClick={props.onSelect}
-      className={clsx(
-        "flex items-center gap-3 p-4 cursor-pointer transition-colors border-l-4",
-        props.selected ? "bg-[#F0F7F9] border-[#0A7EA4]" : "bg-white border-transparent hover:bg-[#F9FAFB]"
-      )}
+      className={chatPartnerRowClassName(props.selected, props.accountStatus.accountDisabled)}
+      aria-disabled={props.accountStatus.accountDisabled}
     >
       <div className="relative shrink-0">
         <div className="w-12 h-12 rounded-full overflow-hidden border border-[#E0E0E0]">
           <ImageWithFallback src={avatar} alt={name} className="w-full h-full object-cover" />
         </div>
-        <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4ADE80] border-2 border-white rounded-full" />
+        {!props.accountStatus.accountDisabled && (
+          <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4ADE80] border-2 border-white rounded-full" />
+        )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex justify-between items-start mb-1">
-          <h3 className="font-bold text-[#111b21] text-[16px] truncate">{name}</h3>
+        <div className="flex justify-between items-start mb-1 gap-2">
+          <div className="min-w-0 flex items-center gap-2">
+            <h3
+              className={clsx(
+                "font-bold text-[16px] truncate",
+                props.accountStatus.accountDisabled ? "text-[#9CA3AF]" : "text-[#111b21]"
+              )}
+            >
+              {name}
+            </h3>
+            {statusBadge ? (
+              <span className="shrink-0 rounded-full bg-[#E5E7EB] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                {statusBadge}
+              </span>
+            ) : null}
+          </div>
           <span className="text-[12px] text-[#667781] shrink-0 font-medium">{props.displayTime}</span>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-[14px] text-[#667781] truncate pr-2 flex-1">
+          <p
+            className={clsx(
+              "text-[14px] truncate pr-2 flex-1",
+              props.accountStatus.accountDisabled ? "text-[#9CA3AF]" : "text-[#667781]"
+            )}
+          >
             {props.unreadCount === 0 && props.pendingOutgoing ? (
               <span className="text-[#0A7EA4] font-medium italic">Pending Request...</span>
             ) : (
               props.lastMessage
             )}
           </p>
-          {props.unreadCount > 0 && (
+          {props.unreadCount > 0 && !props.accountStatus.accountDisabled && (
             <div className="min-w-[20px] h-5 bg-[#00a884] rounded-full flex items-center justify-center px-1.5 shadow-sm">
               <span className="text-white text-[11px] font-bold">{props.unreadCount}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RestChatSidebarRow(props: {
+  chat: ChatPartner;
+  selected: boolean;
+  accountStatus: ChatPartnerAccountStatus;
+  pendingOutgoing: boolean;
+  onSelect: () => void;
+}) {
+  const { chat, accountStatus } = props;
+  const statusBadge = chatPartnerStatusBadge(accountStatus.statusLabel);
+
+  return (
+    <div
+      onClick={props.onSelect}
+      className={chatPartnerRowClassName(props.selected, accountStatus.accountDisabled)}
+      aria-disabled={accountStatus.accountDisabled}
+    >
+      <div className="relative shrink-0">
+        <div className="w-12 h-12 rounded-full overflow-hidden border border-[#E0E0E0]">
+          <ImageWithFallback src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
+        </div>
+        {chat.online && !accountStatus.accountDisabled && (
+          <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4ADE80] border-2 border-white rounded-full" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between items-start mb-1 gap-2">
+          <div className="min-w-0 flex items-center gap-2">
+            <h3
+              className={clsx(
+                "font-bold text-[16px] truncate",
+                accountStatus.accountDisabled ? "text-[#9CA3AF]" : "text-[#111b21]"
+              )}
+            >
+              {chat.name}
+            </h3>
+            {statusBadge ? (
+              <span className="shrink-0 rounded-full bg-[#E5E7EB] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                {statusBadge}
+              </span>
+            ) : null}
+          </div>
+          <span className="text-[12px] text-[#667781] shrink-0 font-medium">{chat.time}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <p
+            className={clsx(
+              "text-[14px] truncate pr-2 flex-1",
+              accountStatus.accountDisabled ? "text-[#9CA3AF]" : "text-[#667781]"
+            )}
+          >
+            {props.pendingOutgoing && chat.unreadCount === 0 ? (
+              <span className="text-[#0A7EA4] font-medium italic">Pending Request...</span>
+            ) : (
+              chat.lastMessage
+            )}
+          </p>
+          {chat.unreadCount > 0 && !accountStatus.accountDisabled && (
+            <div className="min-w-[20px] h-5 bg-[#00a884] rounded-full flex items-center justify-center px-1.5 shadow-sm">
+              <span className="text-white text-[11px] font-bold">{chat.unreadCount}</span>
             </div>
           )}
         </div>
@@ -153,20 +254,6 @@ export function ChatsPage() {
     { skip: !guardPartnerMongoId || isAdminChatUser },
   );
 
-  // Handle incoming userId from navigation
-  useEffect(() => {
-    const userId = searchParams?.get("userId");
-    if (!userId || !currentUserId) return;
-    const id = userId.length > 10 ? userId : String(parseInt(userId, 10));
-    if (isSelfChatPartner(currentUserId, id)) {
-      toast.error("You cannot chat with yourself");
-      setSelectedChatId(null);
-      router.replace("/chats");
-      return;
-    }
-    setSelectedChatId(id);
-  }, [searchParams, currentUserId, router]);
-
   useEffect(() => {
     if (isAdminChatUser) return;
     if (!authUser?.isLinkedinVerified || !guardPartnerMongoId) return;
@@ -206,7 +293,7 @@ export function ChatsPage() {
             avatar: resolveUserProfileImageUrl(u, u.firstName || "U"),
             online: true,
             lastMessage: row.lastMessage,
-            time: row.timestampMs ? format(new Date(row.timestampMs), "p") : "Now",
+            time: row.timestampMs ? formatChatMessageTime(new Date(row.timestampMs)) : "Now",
             unreadCount: row.unreadCount,
             tab: "messages",
           };
@@ -217,7 +304,7 @@ export function ChatsPage() {
           avatar: `https://ui-avatars.com/api/?name=U&background=0A7EA4&color=fff`,
           online: true,
           lastMessage: row.lastMessage,
-          time: row.timestampMs ? format(new Date(row.timestampMs), "p") : "Now",
+          time: row.timestampMs ? formatChatMessageTime(new Date(row.timestampMs)) : "Now",
           unreadCount: row.unreadCount,
           tab: "messages",
         };
@@ -333,9 +420,7 @@ export function ChatsPage() {
       .map((c) => {
         let displayTime = "";
         if (c.time) {
-            const date = new Date(c.time);
-            const isToday = new Date().toDateString() === date.toDateString();
-            displayTime = isToday ? format(date, "p") : format(date, "MMM d");
+            displayTime = formatChatTime(new Date(c.time));
         }
 
         const preview = inboxPreviewChats.find((p) => String(p.id) === String(c.id));
@@ -414,6 +499,67 @@ export function ChatsPage() {
     );
   }, [activeTab, searchQuery, realConversations, realRequests]);
 
+  const sidebarPartnerIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (useFirestore && fbChat.active) {
+      filteredFirestoreRows.forEach((r) => ids.add(r.partnerId));
+    } else {
+      filteredChats.forEach((c) => ids.add(String(c.id)));
+    }
+    return [...ids];
+  }, [useFirestore, fbChat.active, filteredFirestoreRows, filteredChats]);
+
+  const { data: partnerStatusData } = useGetChatPartnerStatusesQuery(sidebarPartnerIds, {
+    skip: sidebarPartnerIds.length === 0,
+  });
+
+  const resolvePartnerStatus = useCallback(
+    (partnerId: string, chat?: ChatPartner): ChatPartnerAccountStatus => {
+      if (chat) {
+        return resolveChatPartnerAccountStatus({
+          isSuspended: chat.isSuspended,
+          isDeleted: chat.isDeleted,
+          accountDisabled: chat.accountDisabled,
+          statusLabel: chat.accountStatus,
+          displayName: chat.name,
+        });
+      }
+      return resolveChatPartnerAccountStatus(partnerStatusData?.statuses?.[partnerId]);
+    },
+    [partnerStatusData]
+  );
+
+  const openPartnerChat = useCallback(
+    (partnerId: string, chat?: ChatPartner) => {
+      const status = resolvePartnerStatus(partnerId, chat);
+      if (status.accountDisabled) {
+        toast.error(chatPartnerDisabledMessage(status.statusLabel));
+        return;
+      }
+      setSelectedChatId(partnerId);
+    },
+    [resolvePartnerStatus]
+  );
+
+  useEffect(() => {
+    const userId = searchParams?.get("userId");
+    if (!userId || !currentUserId) return;
+    const id = userId.length > 10 ? userId : String(parseInt(userId, 10));
+    if (isSelfChatPartner(currentUserId, id)) {
+      toast.error("You cannot chat with yourself");
+      setSelectedChatId(null);
+      router.replace("/chats");
+      return;
+    }
+    openPartnerChat(id);
+  }, [searchParams, currentUserId, router, openPartnerChat]);
+
+  useEffect(() => {
+    if (!selectedChatId) return;
+    const chat = filteredChats.find((c) => String(c.id) === String(selectedChatId));
+    const status = resolvePartnerStatus(String(selectedChatId), chat);
+    if (status.accountDisabled) setSelectedChatId(null);
+  }, [selectedChatId, filteredChats, resolvePartnerStatus]);
 
   const requestCount = useFirestore && fbChat.active ? firestoreRequestRows.length : realRequests.length;
 
@@ -435,7 +581,7 @@ export function ChatsPage() {
       id: m._id,
       text: m.message,
       sender: String(m.senderId) === String(currentUserId) ? "me" : "them",
-      time: format(new Date(m.timestamp), "p"),
+      time: formatChatMessageTime(new Date(m.timestamp)),
       messageType: "text" as const,
       imageUrl: null as string | null,
     }));
@@ -616,7 +762,7 @@ export function ChatsPage() {
             >
               All Messages
               {activeTab === "messages" && (
-                <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#0A7EA4]" />
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#0A7EA4]" />
               )}
             </button>
             <button 
@@ -631,7 +777,7 @@ export function ChatsPage() {
                 <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
               )}
               {activeTab === "requests" && (
-                <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#0A7EA4]" />
+                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#0A7EA4]" />
               )}
             </button>
           </div>
@@ -645,7 +791,7 @@ export function ChatsPage() {
               type="text"
               placeholder="Search chat"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => sanitizeTextOnChange(e.target.value, setSearchQuery)}
               className="w-full h-10 bg-[#F5F7FB] border-none rounded-xl pl-10 pr-4 text-[14px] focus:ring-2 focus:ring-[#0A7EA4]/20 outline-none transition-all"
             />
           </div>
@@ -659,13 +805,9 @@ export function ChatsPage() {
                 <div className="p-8 text-center text-[#9E9E9E] text-[14px]">Loading chats…</div>
               )}
               {filteredFirestoreRows.map((r) => {
-                const date = r.timestampMs ? new Date(r.timestampMs) : null;
-                const displayTime =
-                  date && !Number.isNaN(date.getTime())
-                    ? new Date().toDateString() === date.toDateString()
-                      ? format(date, "p")
-                      : format(date, "MMM d")
-                    : "";
+                const displayTime = r.timestampMs
+                  ? formatChatTime(new Date(r.timestampMs))
+                  : "";
                 const pendingOutgoing =
                   r.isRequested === "pending" && r.senderId === String(currentUserId);
                 return (
@@ -677,60 +819,37 @@ export function ChatsPage() {
                     unreadCount={r.unreadCount}
                     selected={String(selectedChatId) === r.partnerId}
                     pendingOutgoing={pendingOutgoing}
-                    onSelect={() => setSelectedChatId(r.partnerId)}
+                    accountStatus={resolvePartnerStatus(r.partnerId)}
+                    onSelect={() => openPartnerChat(r.partnerId)}
                   />
                 );
               })}
             </>
           ) : (
-            filteredChats.map((chat) => (
-            <div 
-              key={chat.id}
-              onClick={() => setSelectedChatId(chat.id)}
-              className={clsx(
-                "flex items-center gap-3 p-4 cursor-pointer transition-colors border-l-4",
-                selectedChatId === chat.id 
-                  ? "bg-[#F0F7F9] border-[#0A7EA4]" 
-                  : "bg-white border-transparent hover:bg-[#F9FAFB]"
-              )}
-            >
-              <div className="relative shrink-0">
-                <div className="w-12 h-12 rounded-full overflow-hidden border border-[#E0E0E0]">
-                  <ImageWithFallback src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
-                </div>
-                {chat.online && (
-                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#4ADE80] border-2 border-white rounded-full" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-bold text-[#111b21] text-[16px] truncate">{chat.name}</h3>
-                  <span className="text-[12px] text-[#667781] shrink-0 font-medium">{chat.time}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[14px] text-[#667781] truncate pr-2 flex-1">
-                      {chat.unreadCount === 0 && (
-                          // Check if this specific chat in the list is a pending outgoing request
-                          notificationsData?.notifs?.some(n => 
-                              String(n.senderId) === String(currentUserId) && 
-                              String(n.receiverId) === String(chat.id) && 
-                              n.type === "chat_request" && 
-                              !n.isRead
-                          ) ? (
-                              <span className="text-[#0A7EA4] font-medium italic">Pending Request...</span>
-                          ) : chat.lastMessage
-                      )}
-                      {chat.unreadCount > 0 && chat.lastMessage}
-                  </p>
-                  {chat.unreadCount > 0 && (
-                    <div className="min-w-[20px] h-5 bg-[#00a884] rounded-full flex items-center justify-center px-1.5 shadow-sm">
-                      <span className="text-white text-[11px] font-bold">{chat.unreadCount}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            ))
+            filteredChats.map((chat) => {
+              const pendingOutgoing =
+                chat.unreadCount === 0 &&
+                Boolean(
+                  notificationsData?.notifs?.some(
+                    (n) =>
+                      String(n.senderId) === String(currentUserId) &&
+                      String(n.receiverId) === String(chat.id) &&
+                      n.type === "chat_request" &&
+                      !n.isRead
+                  )
+                );
+
+              return (
+                <RestChatSidebarRow
+                  key={chat.id}
+                  chat={chat}
+                  selected={selectedChatId === chat.id}
+                  accountStatus={resolvePartnerStatus(String(chat.id), chat)}
+                  pendingOutgoing={pendingOutgoing}
+                  onSelect={() => openPartnerChat(String(chat.id), chat)}
+                />
+              );
+            })
           )}
 
           {((useFirestore && fbChat.active && fbChat.listLoaded && filteredFirestoreRows.length === 0) ||
@@ -825,7 +944,7 @@ export function ChatsPage() {
                             type="text"
                             placeholder="Reply to accept..."
                             value={messageInput}
-                            onChange={(e) => setMessageInput(e.target.value)}
+                            onChange={(e) => sanitizeTextOnChange(e.target.value, setMessageInput)}
                             onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                             className="flex-1 bg-transparent border-none focus:outline-none text-sm px-3"
                         />

@@ -23,6 +23,10 @@ export interface ChatPartner {
   time: string | null;
   unreadCount: number;
   online: boolean;
+  isSuspended?: boolean;
+  isDeleted?: boolean;
+  accountDisabled?: boolean;
+  accountStatus?: "active" | "suspended" | "deleted";
 }
 
 export const chatsApi = api.injectEndpoints({

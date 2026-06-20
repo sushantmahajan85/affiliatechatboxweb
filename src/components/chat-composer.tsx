@@ -5,6 +5,7 @@ import { Loader2, Paperclip, Send, Smile, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { validateMediaUpload } from "@/lib/media-upload-limits";
 import { toast } from "sonner";
+import { sanitizePlainTextInput, sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const CHAT_EMOJIS = [
@@ -78,7 +79,7 @@ export function ChatComposer({
       setPreviewCaption((c) => c + emoji);
       return;
     }
-    onChange(value + emoji);
+    onChange(sanitizePlainTextInput(value + emoji));
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,7 +114,7 @@ export function ChatComposer({
     if (!pendingImage || previewSending) return;
     setPreviewSending(true);
     try {
-      const ok = await onAttachImage(pendingImage.file, previewCaption.trim());
+      const ok = await onAttachImage(pendingImage.file, sanitizePlainTextInput(previewCaption.trim()));
       if (ok) closePreview();
     } finally {
       setPreviewSending(false);
@@ -158,7 +159,7 @@ export function ChatComposer({
                   ref={previewCaptionRef}
                   type="text"
                   value={previewCaption}
-                  onChange={(e) => setPreviewCaption(e.target.value)}
+                  onChange={(e) => sanitizeTextOnChange(e.target.value, setPreviewCaption)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
@@ -233,7 +234,7 @@ export function ChatComposer({
             <input
               type="text"
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => sanitizeTextOnChange(e.target.value, onChange)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -249,7 +250,7 @@ export function ChatComposer({
           <input
             type="text"
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={(e) => sanitizeTextOnChange(e.target.value, onChange)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -329,3 +330,5 @@ export function ChatComposer({
     </>
   );
 }
+
+export default ChatComposer;

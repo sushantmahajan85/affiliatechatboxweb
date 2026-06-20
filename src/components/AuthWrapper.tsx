@@ -6,6 +6,7 @@ import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { updateUser, logout } from "@/store/authSlice";
 import { getSocket } from "@/lib/socket";
 import { useChatRealtimeSync } from "@/hooks/use-chat-realtime-sync";
+import { toast } from "sonner";
 
 export function AuthWrapper({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
@@ -20,6 +21,11 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (data && data.user) {
+      if (data.user.isSuspended) {
+        toast.error("Your account has been suspended. Contact support for assistance.");
+        dispatch(logout());
+        return;
+      }
       dispatch(updateUser(data.user));
     }
   }, [data, dispatch]);
@@ -27,20 +33,34 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (userId && token) {
       const socket = getSocket();
+
+      const onAccountBlocked = (payload: { code?: string }) => {
+        if (payload?.code === "account_suspended") {
+          toast.error("Your account has been suspended. Contact support for assistance.");
+        }
+        dispatch(logout());
+        socket.disconnect();
+      };
+
       socket.connect();
       socket.emit("user_connected", userId);
+      socket.on("account_blocked", onAccountBlocked);
 
       return () => {
+        socket.off("account_blocked", onAccountBlocked);
         socket.disconnect();
       };
     }
-  }, [userId, token]);
+  }, [userId, token, dispatch]);
 
   useEffect(() => {
     if (error) {
       console.error("Auth error:", error);
       const code = (error as { data?: { code?: string } }).data?.code;
-      if (code === "account_deleted") {
+      if (code === "account_deleted" || code === "account_suspended") {
+        if (code === "account_suspended") {
+          toast.error("Your account has been suspended. Contact support for assistance.");
+        }
         dispatch(logout());
       }
     }

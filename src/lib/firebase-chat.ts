@@ -1,5 +1,6 @@
 import type { Firestore } from "firebase/firestore";
 import { notifyFirestoreChatPush } from "@/lib/chat-push-notify";
+import { sanitizePlainTextInput } from "@/lib/sanitize-plain-text";
 import {
   collection,
   doc,
@@ -111,7 +112,7 @@ export interface FirestoreMessageRow {
 
 function formatTime(ms: number): string {
   try {
-    return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(
+    return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(
       new Date(ms)
     );
   } catch {
@@ -187,6 +188,7 @@ export async function sendFirestoreChatMessage(
   }
 ): Promise<string> {
   const { currentUserId, receiverId, message, messageType, imageUrl, audioUrl, authToken } = params;
+  const safeMessage = sanitizePlainTextInput(message);
   const chatRoomId = buildChatRoomId(currentUserId, receiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 
@@ -196,7 +198,7 @@ export async function sendFirestoreChatMessage(
     const msg: Record<string, unknown> = {
       senderId: currentUserId,
       receiverId,
-      message,
+      message: safeMessage,
       timestamp: serverTimestamp(),
       lastMessageStatus: "Delivered",
       type: messageType,
@@ -214,7 +216,7 @@ export async function sendFirestoreChatMessage(
         isRequested: "pending",
         unreadCountFrom: 0,
         unreadCountTo: 1,
-        lastMessage: message,
+        lastMessage: safeMessage,
         timestamp: serverTimestamp(),
       });
       return;
@@ -222,7 +224,7 @@ export async function sendFirestoreChatMessage(
 
     const d = snap.data() as Record<string, unknown>;
     const updates: Record<string, unknown> = {
-      lastMessage: message,
+      lastMessage: safeMessage,
       timestamp: serverTimestamp(),
     };
     if (currentUserId === String(d.senderId ?? "")) {
@@ -236,7 +238,7 @@ export async function sendFirestoreChatMessage(
   void notifyFirestoreChatPush({
     senderId: currentUserId,
     receiverId,
-    message,
+    message: safeMessage,
     messageType,
     jwt: authToken,
   });
@@ -257,6 +259,7 @@ export async function sendFirestoreAdminMessage(
   }
 ): Promise<string> {
   const { currentUserId, adminReceiverId, message, messageType, imageUrl, authToken } = params;
+  const safeMessage = sanitizePlainTextInput(message);
   const chatRoomId = buildChatRoomId(currentUserId, adminReceiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 
@@ -266,7 +269,7 @@ export async function sendFirestoreAdminMessage(
     const msg: Record<string, unknown> = {
       senderId: currentUserId,
       receiverId: adminReceiverId,
-      message,
+      message: safeMessage,
       timestamp: serverTimestamp(),
       lastMessageStatus: "Delivered",
       type: messageType,
@@ -283,7 +286,7 @@ export async function sendFirestoreAdminMessage(
         isRequested: "accepted",
         unreadCountFrom: 0,
         unreadCountTo: 1,
-        lastMessage: message,
+        lastMessage: safeMessage,
         timestamp: serverTimestamp(),
       });
       return;
@@ -291,7 +294,7 @@ export async function sendFirestoreAdminMessage(
 
     const d = snap.data() as Record<string, unknown>;
     const updates: Record<string, unknown> = {
-      lastMessage: message,
+      lastMessage: safeMessage,
       timestamp: serverTimestamp(),
     };
     if (currentUserId === String(d.senderId ?? "")) {
@@ -305,7 +308,7 @@ export async function sendFirestoreAdminMessage(
   void notifyFirestoreChatPush({
     senderId: currentUserId,
     receiverId: adminReceiverId,
-    message,
+    message: safeMessage,
     messageType,
     jwt: authToken,
   });

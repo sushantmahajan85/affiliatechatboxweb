@@ -1,6 +1,7 @@
 "use client";
 
 import { clsx } from "clsx";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { ChevronDown, Image as ImageIcon, Loader2, Tag, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -159,7 +160,7 @@ export function EditPostDialog({ open, onOpenChange, post }: EditPostDialogProps
           <div className="px-5 py-4 overflow-y-auto flex-1 space-y-4">
             <textarea
               value={content}
-              onChange={(e) => setContent(e.target.value)}
+              onChange={(e) => sanitizeTextOnChange(e.target.value, setContent)}
               rows={5}
               placeholder="Post content…"
               className="w-full bg-[#F5F5F5] border border-[#E0E0E0] rounded-[10px] px-4 py-3 text-[14px] text-[#3C3C3C] focus:outline-none focus:ring-1 focus:ring-[#0A7EA4] resize-none"
@@ -185,7 +186,7 @@ export function EditPostDialog({ open, onOpenChange, post }: EditPostDialogProps
               <div className="relative h-[38px]">
                 <select
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => sanitizeTextOnChange(e.target.value, setCategory)}
                   className="appearance-none pl-3 pr-8 h-full border border-[#E0E0E0] rounded-lg text-[13px] hover:bg-[#F5F5F5] transition-colors focus:outline-none cursor-pointer bg-white min-w-[120px] text-[#3C3C3C]"
                 >
                   <option value={GENERAL_POST_TYPE}>General</option>
@@ -323,7 +324,7 @@ export function EditPostDialog({ open, onOpenChange, post }: EditPostDialogProps
               <input
                 type="text"
                 value={customTagInput}
-                onChange={(e) => setCustomTagInput(e.target.value)}
+                onChange={(e) => sanitizeTextOnChange(e.target.value, setCustomTagInput)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();

@@ -1,4 +1,5 @@
 import { api } from "../api";
+import type { ChatPartnerAccountStatus } from "@/lib/chat-partner-account";
 
 type ProfessionalStatsUser = {
   _id: string;
@@ -90,6 +91,16 @@ export const membersApi = api.injectEndpoints({
         body,
       }),
     }),
+    getChatPartnerStatuses: builder.query<
+      { statuses: Record<string, ChatPartnerAccountStatus> },
+      string[]
+    >({
+      query: (userIds) => ({
+        url: "/api/users/chat-partner-status",
+        method: "POST",
+        body: { userIds },
+      }),
+    }),
     /** @deprecated Web uses reportUser only — that route already emails admin once. */
     sendReportEmailToAdmin: builder.mutation<
       { success: boolean; message: string },
@@ -117,5 +128,6 @@ export const {
   useSaveEmailNotifPrefMutation,
   useUpdateMobilePrivacyMutation,
   useReportUserMutation,
+  useGetChatPartnerStatusesQuery,
   useSendReportEmailToAdminMutation,
 } = membersApi;

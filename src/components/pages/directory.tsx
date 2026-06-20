@@ -1,5 +1,6 @@
 "use client";
 import { LinkedinRecipientNotVerifiedDialog } from "@/components/linkedin-chat-guard-dialog";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { CountryFlag } from "@/components/country-flag";
 import { useAppInfiniteScroll } from "@/hooks/use-app-infinite-scroll";
@@ -188,7 +189,7 @@ export function DirectoryPage() {
               type="text"
               placeholder="Search by name, email, or country code..."
               value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              onChange={(e) => sanitizeTextOnChange(e.target.value, setSearchInput)}
               className="w-full h-11 bg-[#F5F7FB] border-none rounded-xl pl-10 pr-4 text-[14px] focus:ring-2 focus:ring-[#0A7EA4]/20 outline-none transition-all"
             />
           </div>

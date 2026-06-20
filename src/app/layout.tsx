@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Providers } from '@/components/Providers';
-import { Toaster } from 'sonner';
+import { Toaster } from '@/components/ui/sonner';
 import NextTopLoader from 'nextjs-toploader';
 import './globals.css';
 

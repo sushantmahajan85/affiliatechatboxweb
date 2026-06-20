@@ -1,5 +1,6 @@
 "use client";
 import { clsx } from "clsx";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { useAddPostMutation } from "@/store/endpoints/posts";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { openAuthModal } from "@/store/uiSlice";
@@ -206,7 +207,7 @@ export function CreatePost() {
         <textarea
           placeholder="What's on your mind regarding affiliate marketing?"
           value={content}
-          onChange={(e) => setContent(e.target.value)}
+          onChange={(e) => sanitizeTextOnChange(e.target.value, setContent)}
           onClick={() => !isAuthenticated && dispatch(openAuthModal())}
           className="flex-1 w-full min-h-[44px] max-h-[200px] bg-[#F5F5F5] border border-[#E0E0E0] rounded-[10px] px-4 py-2 text-[14px] text-[#3C3C3C] focus:outline-none focus:ring-1 focus:ring-[#0A7EA4] placeholder:text-[#757575] resize-none"
         />
@@ -273,7 +274,7 @@ export function CreatePost() {
             <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#757575] pointer-events-none" />
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => sanitizeTextOnChange(e.target.value, setCategory)}
               className={clsx(
                 "appearance-none pl-9 pr-8 h-full border border-[#E0E0E0] rounded-lg text-[13px] hover:bg-[#F5F5F5] transition-colors focus:outline-none cursor-pointer bg-white min-w-[120px]",
                 category ? "text-[#3C3C3C]" : "text-[#757575]"
@@ -399,7 +400,7 @@ export function CreatePost() {
               <input
                 type="text"
                 value={customTagInput}
-                onChange={(e) => setCustomTagInput(e.target.value)}
+                onChange={(e) => sanitizeTextOnChange(e.target.value, setCustomTagInput)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();

@@ -1,5 +1,6 @@
 "use client";
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import {
   getPartnerTitle,
   PartnerDetailDialog,
@@ -88,7 +89,7 @@ export function PartnersPage() {
             type="text"
             placeholder="Search partners..."
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(e) => sanitizeTextOnChange(e.target.value, setSearchInput)}
             className="w-full h-11 bg-[#F5F7FB] border-none rounded-xl pl-10 pr-4 text-[14px] focus:ring-2 focus:ring-[#0A7EA4]/20 outline-none transition-all"
           />
         </div>

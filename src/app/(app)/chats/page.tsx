@@ -1,10 +1,5 @@
-import { ChatsPage } from '@/components/pages/chats';
-import { Suspense } from 'react';
+import { ChatsPageClient } from "./chats-page-client";
 
 export default function Page() {
-  return (
-    <Suspense fallback={<div>Loading chats...</div>}>
-      <ChatsPage />
-    </Suspense>
-  );
+  return <ChatsPageClient />;
 }

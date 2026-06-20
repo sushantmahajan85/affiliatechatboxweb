@@ -14,6 +14,10 @@ export type InboxPreviewChat = {
   status: "online" | "offline";
   unreadCount: number;
   isRequest: boolean;
+  isSuspended?: boolean;
+  isDeleted?: boolean;
+  accountDisabled?: boolean;
+  accountStatus?: "active" | "suspended" | "deleted";
 };
 
 function isRestChatRequest(
@@ -83,9 +87,13 @@ export function useInboxPreviewChats(): {
         avatar: c.avatar,
         lastMsg: c.lastMessage,
         time: c.time,
-        status: c.online ? ("online" as const) : ("offline" as const),
-        unreadCount: c.unreadCount,
+        status: c.online && !c.accountDisabled ? ("online" as const) : ("offline" as const),
+        unreadCount: c.accountDisabled ? 0 : c.unreadCount,
         isRequest: isRestChatRequest(c.id, currentUserId, notifData?.notifs),
+        isSuspended: c.isSuspended,
+        isDeleted: c.isDeleted,
+        accountDisabled: c.accountDisabled,
+        accountStatus: c.accountStatus,
       }));
   }, [useFb, listCtx.rooms, convQuery.data, notifData?.notifs, currentUserId]);
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
@@ -32,6 +32,14 @@ import {
   senderCanUseLinkedinChat,
 } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+import {
+  chatPartnerDisabledMessage,
+  chatPartnerStatusBadge,
+  resolveChatPartnerAccountStatus,
+  type ChatPartnerAccountStatus,
+} from "@/lib/chat-partner-account";
+import { useGetChatPartnerStatusesQuery } from "@/store/endpoints/members";
+import type { InboxPreviewChat } from "@/hooks/use-inbox-preview-chats";
 import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
 import { format, isToday } from "date-fns";
 import { toast } from "sonner";
@@ -57,10 +65,12 @@ function formatChatListTime(time: string | null | undefined): string {
 function OverlayChatListItem({
   chat,
   isActive,
+  accountStatus,
   onOpen,
 }: {
   chat: OverlayChatPeer & { lastMsg: string; unreadCount: number; time?: string | null };
   isActive: boolean;
+  accountStatus: ChatPartnerAccountStatus;
   onOpen: (
     resolvedName: string,
     resolvedAvatar: string,
@@ -68,48 +78,91 @@ function OverlayChatListItem({
     partnerIsAdmin: boolean
   ) => void;
 }) {
-  const { data: profileData, isLoading } = useGetProfileQuery(chat.id, { skip: !chat.id });
+  const skipProfile = !chat.id || accountStatus.accountDisabled;
+  const { data: profileData, isLoading } = useGetProfileQuery(chat.id, { skip: skipProfile });
   const user = profileData?.user;
   const resolvedName =
-    user ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email : chat.name;
+    accountStatus.displayName ||
+    (user
+      ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || user.email
+      : chat.name);
   const resolvedAvatar = resolveUserProfileImageUrl(user, resolvedName);
+  const statusBadge = chatPartnerStatusBadge(accountStatus.statusLabel);
 
   return (
     <div
       onClick={() => {
+        if (accountStatus.accountDisabled) {
+          toast.error(chatPartnerDisabledMessage(accountStatus.statusLabel));
+          return;
+        }
         if (isLoading) return;
         onOpen(resolvedName, resolvedAvatar, Boolean(user?.isLinkedinVerified), user?.role === "admin");
       }}
       className={clsx(
-        "flex items-start gap-3 cursor-pointer hover:bg-[#F3F6F8] p-3 transition-colors border-l-[3px]",
-        isActive ? "border-[#0A66C2] bg-[#F3F6F8]" : "border-transparent hover:border-[#0A66C2]"
+        "flex items-start gap-3 p-3 transition-colors border-l-[3px]",
+        accountStatus.accountDisabled
+          ? "cursor-not-allowed bg-[#F3F4F6] opacity-60 grayscale border-transparent"
+          : "cursor-pointer hover:bg-[#F3F6F8]",
+        !accountStatus.accountDisabled &&
+          (isActive ? "border-[#0A66C2] bg-[#F3F6F8]" : "border-transparent hover:border-[#0A66C2]")
       )}
+      aria-disabled={accountStatus.accountDisabled}
     >
       <div className="relative shrink-0 mt-0.5">
         <div className="w-12 h-12 rounded-full overflow-hidden">
           <ImageWithFallback src={resolvedAvatar} alt={resolvedName} className="w-full h-full object-cover" />
         </div>
-        {chat.status === "online" && (
+        {chat.status === "online" && !accountStatus.accountDisabled && (
           <div className="absolute bottom-0 right-0.5 w-3.5 h-3.5 bg-[#057642] border-2 border-white rounded-full"></div>
         )}
-        {chat.unreadCount > 0 && (
+        {chat.unreadCount > 0 && !accountStatus.accountDisabled && (
           <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
             {chat.unreadCount}
           </div>
         )}
       </div>
       <div className="flex flex-col min-w-0 flex-1 border-b border-[#F1F5F9] pb-3 last:border-0">
-        <div className="flex items-center justify-between mb-0.5">
-          <span className="text-[14px] font-bold text-[#1A1A2E] truncate">{resolvedName}</span>
-          <span className="text-[12px] text-[#666666]">{formatChatListTime(chat.time) || "Today"}</span>
+        <div className="flex items-center justify-between mb-0.5 gap-2">
+          <div className="min-w-0 flex items-center gap-1.5">
+            <span
+              className={clsx(
+                "text-[14px] font-bold truncate",
+                accountStatus.accountDisabled ? "text-[#9CA3AF]" : "text-[#1A1A2E]"
+              )}
+            >
+              {resolvedName}
+            </span>
+            {statusBadge ? (
+              <span className="shrink-0 rounded-full bg-[#E5E7EB] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                {statusBadge}
+              </span>
+            ) : null}
+          </div>
+          <span className="text-[12px] text-[#666666] shrink-0">{formatChatListTime(chat.time) || "Today"}</span>
         </div>
-        <span className="text-[12px] text-[#666666] line-clamp-2 leading-snug">{chat.lastMsg}</span>
+        <span
+          className={clsx(
+            "text-[12px] line-clamp-2 leading-snug",
+            accountStatus.accountDisabled ? "text-[#9CA3AF]" : "text-[#666666]"
+          )}
+        >
+          {chat.lastMsg}
+        </span>
       </div>
     </div>
   );
 }
 
-function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => void }) {
+function ChatWindow({
+  chat,
+  accountStatus,
+  onClose,
+}: {
+  chat: OverlayChatPeer;
+  accountStatus: ChatPartnerAccountStatus;
+  onClose: () => void;
+}) {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const { userId: authUserId, user: currentUser, token } = useAppSelector((state) => state.auth);
@@ -126,18 +179,19 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: partnerProfile, isSuccess: partnerProfileReady } = useGetProfileQuery(chat.id, {
-    skip: !chat.id,
+    skip: !chat.id || accountStatus.accountDisabled,
   });
 
   const partnerUser = partnerProfile?.user;
   const displayName = useMemo(() => {
+    if (accountStatus.displayName) return accountStatus.displayName;
     if (partnerUser) {
       const full = `${partnerUser.firstName || ""} ${partnerUser.lastName || ""}`.trim();
       return full || partnerUser.email || chat.name;
     }
     if (chat.name && chat.name !== "User") return chat.name;
     return partnerProfileReady ? chat.name : "…";
-  }, [partnerUser, partnerProfileReady, chat.name]);
+  }, [accountStatus.displayName, partnerUser, partnerProfileReady, chat.name]);
 
   const displayAvatar = useMemo(
     () => resolveUserProfileImageUrl(partnerUser, displayName) || chat.avatar,
@@ -244,9 +298,14 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
     isAdminChatUser,
     partnerUser?.role === "admin"
   );
-  const canSendInChat = !chatBlockedReason && !isSenderPending;
+  const canSendInChat =
+    !accountStatus.accountDisabled && !chatBlockedReason && !isSenderPending;
 
   const validateChatSend = (): boolean => {
+    if (accountStatus.accountDisabled) {
+      toast.error(chatPartnerDisabledMessage(accountStatus.statusLabel));
+      return false;
+    }
     if (!currentUserId || isSenderPending) return false;
     if (isSelfChatPartner(currentUserId, chat.id)) {
       toast.error("You cannot chat with yourself");
@@ -355,11 +414,13 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
     }
   };
 
-  const composerPlaceholder = !canSendInChat
-    ? "Messaging unavailable"
-    : isRecipientPending
-      ? "Click Accept to reply"
-      : "Type a message";
+  const composerPlaceholder = accountStatus.accountDisabled
+    ? chatPartnerStatusBadge(accountStatus.statusLabel) ?? "Unavailable"
+    : !canSendInChat
+      ? "Messaging unavailable"
+      : isRecipientPending
+        ? "Click Accept to reply"
+        : "Type a message";
 
   const handleOpenInInbox = () => {
     router.push(`/chats?userId=${encodeURIComponent(chat.id)}`);
@@ -376,14 +437,18 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
             <div className="w-8 h-8 rounded-full overflow-hidden">
               <ImageWithFallback src={displayAvatar} alt={displayName} className="w-full h-full object-cover" />
             </div>
-            {chat.status === "online" && (
+            {chat.status === "online" && !accountStatus.accountDisabled && (
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#4ADE80] border-2 border-white rounded-full"></div>
             )}
           </div>
           <div className="flex flex-col">
             <span className="text-[13px] font-bold text-[#1A1A2E] leading-tight truncate w-32">{displayName}</span>
-            <span className="text-[11px] text-[#4ADE80] font-medium leading-tight">
-              {isRecipientPending ? "Sent you a request" : "Active now"}
+            <span className="text-[11px] font-medium leading-tight text-[#64748B]">
+              {accountStatus.accountDisabled
+                ? chatPartnerStatusBadge(accountStatus.statusLabel) ?? "Unavailable"
+                : isRecipientPending
+                  ? "Sent you a request"
+                  : "Active now"}
             </span>
           </div>
         </div>
@@ -484,6 +549,12 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
       {/* Input Area */}
       {!isSenderPending && (
         <div className="p-2 bg-[#F0F2F5] flex flex-col gap-2 border-t border-[#E0E0E0]">
+          {accountStatus.accountDisabled ? (
+            <p className="text-[11px] text-[#64748B] px-1 leading-snug text-center py-2">
+              {chatPartnerDisabledMessage(accountStatus.statusLabel)}
+            </p>
+          ) : (
+            <>
           {chatBlockedReason && partnerProfileReady && (
             <p className="text-[11px] text-[#64748B] px-1 leading-snug">
               {chatBlockedReason === "sender_not_verified"
@@ -503,6 +574,8 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
             isSending={isFbSending}
             isUploading={isUploadingImage}
           />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -512,6 +585,15 @@ function ChatWindow({ chat, onClose }: { chat: OverlayChatPeer; onClose: () => v
       reason={linkedinGuardReason}
     />
     </>
+  );
+}
+
+function chatHasAccountStatus(chat: InboxPreviewChat): boolean {
+  return (
+    chat.accountDisabled !== undefined ||
+    chat.isSuspended !== undefined ||
+    chat.isDeleted !== undefined ||
+    chat.accountStatus !== undefined
   );
 }
 
@@ -543,6 +625,37 @@ export function MessagingOverlay() {
   };
   const { recentChats, inboxReady } = useInboxPreviewChats();
 
+  const overlayPartnerIds = useMemo(() => {
+    const ids = new Set<string>();
+    recentChats.forEach((c) => ids.add(c.id));
+    activeChats.forEach((c) => ids.add(c.id));
+    return [...ids];
+  }, [recentChats, activeChats]);
+
+  const { data: partnerStatusData } = useGetChatPartnerStatusesQuery(overlayPartnerIds, {
+    skip: overlayPartnerIds.length === 0,
+  });
+
+  const resolvePartnerStatus = useCallback(
+    (partnerId: string, chat?: InboxPreviewChat): ChatPartnerAccountStatus => {
+      if (chat && chatHasAccountStatus(chat)) {
+        return resolveChatPartnerAccountStatus({
+          isSuspended: chat.isSuspended,
+          isDeleted: chat.isDeleted,
+          accountDisabled: chat.accountDisabled,
+          statusLabel: chat.accountStatus,
+          displayName: chat.name,
+        });
+      }
+      const fromBatch = partnerStatusData?.statuses?.[partnerId];
+      if (fromBatch) {
+        return resolveChatPartnerAccountStatus(fromBatch);
+      }
+      return resolveChatPartnerAccountStatus(chat ? { displayName: chat.name } : null);
+    },
+    [partnerStatusData]
+  );
+
   const [activeTab, setActiveTab] = useState<"all" | "requests">("all");
 
   const visibleChats = useMemo(() => {
@@ -569,8 +682,9 @@ export function MessagingOverlay() {
 
     recentChats.forEach(chat => {
         const prevCount = lastUnreadCountRef.current[chat.id] || 0;
+        const status = resolvePartnerStatus(chat.id, chat);
         
-        if (chat.unreadCount > prevCount && canUseMessaging) {
+        if (chat.unreadCount > prevCount && canUseMessaging && !status.accountDisabled) {
             if (!activeChats.find(ac => ac.id === chat.id)) {
                 dispatch(openChat({
                     id: chat.id,
@@ -587,20 +701,34 @@ export function MessagingOverlay() {
         const audio = new Audio("https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3");
         audio.play().catch(() => undefined);
     }
-  }, [recentChats, activeChats, dispatch, inboxReady, canUseMessaging]);
+  }, [recentChats, activeChats, dispatch, inboxReady, canUseMessaging, resolvePartnerStatus]);
+
+  useEffect(() => {
+    activeChats.forEach((ac) => {
+      const preview = recentChats.find((c) => c.id === ac.id);
+      const status = resolvePartnerStatus(ac.id, preview);
+      if (status.accountDisabled) {
+        dispatch(closeChat(ac.id));
+      }
+    });
+  }, [activeChats, recentChats, resolvePartnerStatus, dispatch]);
 
   return (
     <>
     <div className="fixed bottom-0 right-8 hidden md:flex items-end gap-3 z-[100] pointer-events-none">
       {/* Active Chat Windows */}
       <div className="flex items-end gap-3 pointer-events-auto">
-        {activeChats.map((chat) => (
+        {activeChats.map((chat) => {
+          const preview = recentChats.find((c) => c.id === chat.id);
+          return (
           <ChatWindow 
             key={chat.id} 
-            chat={chat} 
+            chat={chat}
+            accountStatus={resolvePartnerStatus(chat.id, preview)}
             onClose={() => dispatch(closeChat(chat.id))} 
           />
-        ))}
+          );
+        })}
       </div>
 
       <div className="w-72 bg-white rounded-t-[10px] shadow-[0_4px_12px_rgba(0,0,0,0.15)] border border-[#E0E0E0] overflow-hidden pointer-events-auto">
@@ -670,6 +798,7 @@ export function MessagingOverlay() {
                     key={chat.id}
                     chat={chat}
                     isActive={Boolean(activeChats.find((c) => c.id === chat.id))}
+                    accountStatus={resolvePartnerStatus(chat.id, chat)}
                     onOpen={(resolvedName, resolvedAvatar, partnerLinkedinVerified, partnerIsAdmin) => {
                       if (isSelfChatPartner(currentUser?._id, chat.id)) {
                         toast.error("You cannot chat with yourself");

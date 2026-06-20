@@ -2,8 +2,20 @@
 import * as React from "react";
 
 import { cn } from "./utils";
+import {
+  sanitizeInputEventValue,
+  shouldSanitizeInputType,
+} from "@/lib/sanitize-plain-text";
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, onChange, ...props }: React.ComponentProps<"input">) {
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (shouldSanitizeInputType(type)) {
+      sanitizeInputEventValue(event, onChange);
+      return;
+    }
+    onChange?.(event);
+  };
+
   return (
     <input
       type={type}
@@ -14,10 +26,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
         className,
       )}
+      onChange={handleChange}
       {...props}
     />
   );
 }
 
 export { Input };
-

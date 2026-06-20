@@ -1,5 +1,6 @@
 "use client";
 import { Bell, Check, MoreHorizontal, Filter, Search, ChevronRight } from "lucide-react";
+import { sanitizeTextOnChange } from "@/lib/sanitize-plain-text";
 import { motion } from "motion/react";
 
 import { 
@@ -90,7 +91,7 @@ export function NotificationsPage() {
               type="text" 
               placeholder="Search notifications..." 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => sanitizeTextOnChange(e.target.value, setSearchQuery)}
               className="w-full h-11 bg-[#F5F5F5] border-none rounded-xl pl-10 pr-4 text-sm focus:ring-2 focus:ring-[#7B61FF]/20 transition-all"
             />
           </div>
