@@ -41,6 +41,6 @@ const baseQueryWithAccountGuard: BaseQueryFn<
 export const api = createApi({
   reducerPath: 'api',
   baseQuery: baseQueryWithAccountGuard,
-  tagTypes: ['User', 'Post', 'Partner', 'Message', 'Notifications', 'ChatHistory', 'Conversations'],
+  tagTypes: ['User', 'Post', 'Partner', 'Message', 'Notifications', 'NotificationList', 'NotificationUnread', 'ChatRequestNotifications', 'ChatHistory', 'Conversations'],
   endpoints: () => ({}),
 });

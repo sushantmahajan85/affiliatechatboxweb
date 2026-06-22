@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useAppSelector } from "@/store/hooks";
 import { useGetConversationsQuery } from "@/store/endpoints/chats";
-import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
+import { useGetChatRequestNotificationsQuery } from "@/store/endpoints/notifications";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { isSelfChatPartner } from "@/lib/linkedin-messaging";
 
@@ -58,7 +58,7 @@ export function useInboxPreviewChats(): {
     pollingInterval: 15000,
   });
 
-  const { data: notifData } = useGetNotificationsQuery(currentUserId, {
+  const { data: notifData } = useGetChatRequestNotificationsQuery(currentUserId, {
     skip: !currentUserId || useFb,
     pollingInterval: 15000,
   });

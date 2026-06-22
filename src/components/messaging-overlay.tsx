@@ -40,7 +40,7 @@ import {
 } from "@/lib/chat-partner-account";
 import { useGetChatPartnerStatusesQuery } from "@/store/endpoints/members";
 import type { InboxPreviewChat } from "@/hooks/use-inbox-preview-chats";
-import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
+import { useGetChatRequestNotificationsQuery } from "@/store/endpoints/notifications";
 import { format, isToday } from "date-fns";
 import { toast } from "sonner";
 import { LinkedinChatGuardDialog } from "@/components/linkedin-chat-guard-dialog";
@@ -215,7 +215,7 @@ function ChatWindow({
   const useFb = useChatBackendIsFirebase();
   const fbChat = useFirebaseChatModule(currentUserId || undefined, chat.id);
 
-  const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
+  const { data: notificationsData } = useGetChatRequestNotificationsQuery(currentUserId || "", {
     skip: !currentUserId || useFb,
     pollingInterval: 15000,
   });

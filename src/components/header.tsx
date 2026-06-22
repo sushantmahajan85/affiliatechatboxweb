@@ -16,7 +16,7 @@ interface HeaderProps {
 }
 
 import {
-  useGetNotificationsQuery,
+  useGetNotificationPreviewQuery,
   useGetUnreadStatusQuery,
   useMarkAllReadMutation
 } from "@/store/endpoints/notifications";
@@ -50,13 +50,12 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
   const dispatch = useAppDispatch();
 
-  const { data: notificationsData } = useGetNotificationsQuery(user?._id || "", {
-    skip: !isAuthenticated || !user?._id,
-    pollingInterval: 3000,
-  });
   const { data: unreadData } = useGetUnreadStatusQuery(user?._id || "", {
     skip: !isAuthenticated || !user?._id,
-    pollingInterval: 30000, 
+    pollingInterval: 30000,
+  });
+  const { data: previewData } = useGetNotificationPreviewQuery(user?._id || "", {
+    skip: !isAuthenticated || !user?._id || !showNotifications,
   });
   const [markAllRead, { isLoading: isMarkingAllRead }] = useMarkAllReadMutation();
 
@@ -70,13 +69,8 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
     }
   };
 
-  const notifications = notificationsData?.notifs || [];
-  
-  const systemNotifications = notifications.filter(n => n.type !== "chat_request");
-  const messageNotifications = notifications.filter(n => n.type === "chat_request");
-
-  const hasSystemUnread = systemNotifications.some(n => !n.isRead);
-  const unreadMessageCount = messageNotifications.filter(n => !n.isRead).length;
+  const systemNotifications = previewData?.notifs || [];
+  const hasSystemUnread = unreadData?.hasUnreadNotifications ?? false;
 
   const handleLogout = () => {
     dispatch(logout());
@@ -170,7 +164,7 @@ export function Header({ onMenuClick, onPartnersClick }: HeaderProps) {
                   </div>
                   <div className="max-h-[calc(100vh-11rem)] md:max-h-80 overflow-y-auto scrollbar-hide">
                     {systemNotifications.length > 0 ? (
-                      systemNotifications.slice(0, 10).map(notif => (
+                      systemNotifications.map(notif => (
                         <div 
                           key={notif._id} 
                           onClick={() => { router.push('/notifications'); setShowNotifications(false); }}

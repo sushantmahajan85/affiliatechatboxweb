@@ -18,7 +18,7 @@ import {
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation } from "@/store/endpoints/chats";
-import { useGetNotificationsQuery } from "@/store/endpoints/notifications";
+import { useGetChatRequestNotificationsQuery } from "@/store/endpoints/notifications";
 import { useInboxPreviewChats } from "@/hooks/use-inbox-preview-chats";
 import { useAppSelector } from "@/store/hooks";
 import {
@@ -343,7 +343,7 @@ export function ChatsPage() {
     };
   }, [selectedChatId, convData, profileData, useFirestore, fbChat.active, inboxFbRooms]);
 
-  const { data: notificationsData } = useGetNotificationsQuery(currentUserId || "", {
+  const { data: notificationsData } = useGetChatRequestNotificationsQuery(currentUserId || "", {
     skip: !currentUserId,
     pollingInterval: 15000,
   });

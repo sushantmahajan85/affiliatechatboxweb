@@ -20,12 +20,12 @@ export function useChatRealtimeSync() {
     }
 
     const invalidate = () => {
-      dispatch(api.util.invalidateTags(["Conversations", "ChatHistory", "Notifications"]));
+      dispatch(api.util.invalidateTags(["Conversations", "ChatHistory", "NotificationUnread", "ChatRequestNotifications"]));
     };
 
     const onMessageReceived = (_payload: ChatSocketPayload) => {
       if (useFb) {
-        dispatch(api.util.invalidateTags(["Notifications"]));
+        dispatch(api.util.invalidateTags(["NotificationUnread", "ChatRequestNotifications"]));
         return;
       }
       invalidate();
@@ -33,7 +33,7 @@ export function useChatRealtimeSync() {
 
     const onChatUpdate = (_payload: ChatSocketPayload) => {
       if (useFb) {
-        dispatch(api.util.invalidateTags(["Notifications"]));
+        dispatch(api.util.invalidateTags(["NotificationUnread", "ChatRequestNotifications"]));
         return;
       }
       invalidate();

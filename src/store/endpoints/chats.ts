@@ -73,7 +73,7 @@ export const chatsApi = api.injectEndpoints({
         method: 'POST',
         body,
       }),
-      invalidatesTags: ['Conversations', 'Notifications'],
+      invalidatesTags: ['Conversations', 'NotificationUnread', 'ChatRequestNotifications'],
       async onQueryStarted({ userId, partnerId }, { dispatch, queryFulfilled }) {
         const patchResult = dispatch(
           chatsApi.util.updateQueryData('getConversations', userId, (draft) => {
