@@ -364,7 +364,10 @@ function ChatWindow({
       return true;
     } catch (err) {
       console.error("Failed to send message from popup:", err);
-      toast.error(payload.messageType === "image" ? "Failed to send image" : "Failed to send");
+      const message = err instanceof Error && err.message ? err.message : null;
+      toast.error(
+        message || (payload.messageType === "image" ? "Failed to send image" : "Failed to send")
+      );
       return false;
     }
   };

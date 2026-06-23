@@ -26,6 +26,11 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
         dispatch(logout());
         return;
       }
+      if (data.user.isDeleted) {
+        toast.error("Your account has been deleted.");
+        dispatch(logout());
+        return;
+      }
       dispatch(updateUser(data.user));
     }
   }, [data, dispatch]);
@@ -60,6 +65,8 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
       if (code === "account_deleted" || code === "account_suspended") {
         if (code === "account_suspended") {
           toast.error("Your account has been suspended. Contact support for assistance.");
+        } else {
+          toast.error("Your account has been deleted.");
         }
         dispatch(logout());
       }

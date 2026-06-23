@@ -75,6 +75,8 @@ export function ReportPostDialog({
       toast.success("Post reported to admin.");
       handleOpenChange(false);
     } catch (err: unknown) {
+      const code = (err as { data?: { code?: string } })?.data?.code;
+      if (code === "invalid_input") return;
       const message =
         (err as { data?: { message?: string } })?.data?.message ||
         "Failed to report post. Please try again.";

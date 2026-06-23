@@ -140,6 +140,7 @@ export function EditPostDialog({ open, onOpenChange, post }: EditPostDialogProps
       toast.success("Post updated successfully.");
       onOpenChange(false);
     } catch (err: any) {
+      if (err?.data?.code === "invalid_input") return;
       toast.error(err?.data?.message || "Failed to update post.");
     }
   };

@@ -1,11 +1,18 @@
 import type { ChangeEvent, ChangeEventHandler } from "react";
+import type { FetchArgs } from "@reduxjs/toolkit/query";
+import { toast } from "sonner";
 
-const SCRIPT_BLOCK_RE = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
-const STYLE_BLOCK_RE = /<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi;
-const HTML_TAG_RE = /<[^>]*>/g;
-const ANGLE_BRACKET_RE = /[<>＜＞]/g;
-const HTML_LT_ENTITY_RE = /&lt;|&#0*60;|&#x0*3c;?/gi;
-const HTML_GT_ENTITY_RE = /&gt;|&#0*62;|&#x0*3e;?/gi;
+const SCRIPT_BLOCK_RE = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/i;
+const STYLE_BLOCK_RE = /<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/i;
+const HTML_TAG_RE = /<[^>]*>/;
+const ANGLE_BRACKET_RE = /[<>＜＞]/;
+const HTML_LT_ENTITY_RE = /&lt;|&#0*60;|&#x0*3c;?/i;
+const HTML_GT_ENTITY_RE = /&gt;|&#0*62;|&#x0*3e;?/i;
+const JS_PROTOCOL_RE = /javascript\s*:/i;
+const EVENT_HANDLER_RE = /\bon[a-z]+\s*=/i;
+
+export const DANGEROUS_INPUT_MESSAGE =
+  "Input contains characters that are not allowed (<, >, HTML tags, or script content). Please remove them.";
 
 const SANITIZABLE_INPUT_TYPES = new Set([
   "text",
@@ -15,17 +22,126 @@ const SANITIZABLE_INPUT_TYPES = new Set([
   "email",
 ]);
 
-/** Strip HTML/script content and angle brackets from user-supplied text. */
+const SKIP_VALIDATION_KEYS = new Set([
+  "password",
+  "oldpassword",
+  "newpassword",
+  "confirmpassword",
+  "code",
+  "otp",
+  "token",
+  "jwttoken",
+  "linkedinaccesstoken",
+  "accesstoken",
+  "refreshtoken",
+  "fcmtoken",
+  "webfcmtoken",
+]);
+
+const MAX_VALIDATE_DEPTH = 24;
+
+/** True when a string contains XSS-related markup or angle brackets. */
+export function containsDangerousPlainText(input: string): boolean {
+  if (!input) return false;
+  return (
+    SCRIPT_BLOCK_RE.test(input) ||
+    STYLE_BLOCK_RE.test(input) ||
+    HTML_TAG_RE.test(input) ||
+    ANGLE_BRACKET_RE.test(input) ||
+    HTML_LT_ENTITY_RE.test(input) ||
+    HTML_GT_ENTITY_RE.test(input) ||
+    JS_PROTOCOL_RE.test(input) ||
+    EVENT_HANDLER_RE.test(input)
+  );
+}
+
+function shouldSkipValidationKey(key: string): boolean {
+  return SKIP_VALIDATION_KEYS.has(String(key || "").toLowerCase());
+}
+
+function shouldRecurse(value: unknown): value is Record<string, unknown> | unknown[] {
+  if (value == null || typeof value !== "object") return false;
+  if (value instanceof Date) return false;
+  if (typeof Blob !== "undefined" && value instanceof Blob) return false;
+  if (typeof File !== "undefined" && value instanceof File) return false;
+  return true;
+}
+
+/** Returns the first offending field path, or null if all strings are safe. */
+export function findDangerousPlainTextInValue(
+  value: unknown,
+  depth = 0,
+  path = ""
+): string | null {
+  if (depth > MAX_VALIDATE_DEPTH) return null;
+  if (value == null) return null;
+
+  if (typeof value === "string") {
+    return containsDangerousPlainText(value) ? path || "input" : null;
+  }
+
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const hit = findDangerousPlainTextInValue(value[i], depth + 1, `${path}[${i}]`);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  if (!shouldRecurse(value)) return null;
+
+  for (const [key, nested] of Object.entries(value)) {
+    if (shouldSkipValidationKey(key)) continue;
+    const nextPath = path ? `${path}.${key}` : key;
+    const hit = findDangerousPlainTextInValue(nested, depth + 1, nextPath);
+    if (hit) return hit;
+  }
+
+  return null;
+}
+
+export function validatePlainTextFields(
+  fields: Record<string, string | undefined | null>
+): string | null {
+  for (const [key, value] of Object.entries(fields)) {
+    if (shouldSkipValidationKey(key)) continue;
+    if (typeof value === "string" && containsDangerousPlainText(value)) {
+      return key;
+    }
+  }
+  return null;
+}
+
+/** Validate strings before submit; shows a toast and returns false when unsafe. */
+export function assertSafePlainTextOnSubmit(
+  value: string,
+  options?: { silent?: boolean }
+): boolean {
+  if (!containsDangerousPlainText(value)) return true;
+  if (!options?.silent) toast.error(DANGEROUS_INPUT_MESSAGE);
+  return false;
+}
+
+export function assertSafePlainTextFieldsOnSubmit(
+  fields: Record<string, string | undefined | null>
+): boolean {
+  const bad = validatePlainTextFields(fields);
+  if (!bad) return true;
+  toast.error(DANGEROUS_INPUT_MESSAGE);
+  return false;
+}
+
+/** @deprecated Prefer validate-on-submit; kept for legacy callers that strip silently. */
 export function sanitizePlainTextInput(input: string): string {
   if (!input) return input;
 
   let value = input;
-  value = value.replace(SCRIPT_BLOCK_RE, "");
-  value = value.replace(STYLE_BLOCK_RE, "");
-  value = value.replace(HTML_TAG_RE, "");
-  value = value.replace(HTML_LT_ENTITY_RE, "");
-  value = value.replace(HTML_GT_ENTITY_RE, "");
-  value = value.replace(ANGLE_BRACKET_RE, "");
+  value = value.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+  value = value.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "");
+  value = value.replace(/<[^>]*>/g, "");
+  value = value.replace(/&lt;|&#0*60;|&#x0*3c;?/gi, "");
+  value = value.replace(/&gt;|&#0*62;|&#x0*3e;?/gi, "");
+  value = value.replace(/[<>＜＞]/g, "");
   return value;
 }
 
@@ -38,86 +154,75 @@ export function sanitizeTextOnChange(
   value: string,
   onChange: (value: string) => void
 ): void {
-  onChange(sanitizePlainTextInput(value));
+  onChange(value);
 }
 
 export function sanitizeInputEventValue(
   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   onChange?: ChangeEventHandler<HTMLInputElement | HTMLTextAreaElement>
 ): void {
-  if (!onChange) return;
-  const sanitized = sanitizePlainTextInput(event.target.value);
-  if (sanitized !== event.target.value) {
-    event.target.value = sanitized;
-  }
-  onChange(event);
+  onChange?.(event);
 }
 
-const MAX_SANITIZE_DEPTH = 24;
-
-function shouldRecurse(value: unknown): value is Record<string, unknown> | unknown[] {
-  if (value == null || typeof value !== "object") return false;
-  if (value instanceof Date) return false;
-  if (typeof Blob !== "undefined" && value instanceof Blob) return false;
-  if (typeof File !== "undefined" && value instanceof File) return false;
-  return true;
-}
-
-/** Deep-sanitize string fields in JSON request bodies before they leave the client. */
-export function sanitizeRequestPayload<T>(value: T, depth = 0): T {
-  if (depth > MAX_SANITIZE_DEPTH) return value;
-  if (value == null) return value;
-  if (typeof value === "string") return sanitizePlainTextInput(value) as T;
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeRequestPayload(item, depth + 1)) as T;
-  }
-  if (!shouldRecurse(value)) return value;
-
-  const out: Record<string, unknown> = {};
-  for (const [key, nested] of Object.entries(value)) {
-    out[key] = sanitizeRequestPayload(nested, depth + 1);
-  }
-  return out as T;
-}
-
-export function sanitizeFormData(formData: FormData): FormData {
-  const sanitized = new FormData();
+export function validateFormDataStrings(formData: FormData): string | null {
   for (const [key, value] of formData.entries()) {
+    if (shouldSkipValidationKey(key)) continue;
     if (typeof value === "string") {
-      sanitized.append(key, sanitizePlainTextInput(value));
-    } else {
-      sanitized.append(key, value);
+      const hit = findDangerousPlainTextInValue(value, 0, key);
+      if (hit) return hit;
     }
   }
-  return sanitized;
+  return null;
 }
 
-import type { FetchArgs } from '@reduxjs/toolkit/query';
-
-export function sanitizeFetchArgs(args: string | FetchArgs): string | FetchArgs {
-  if (typeof args === "string") return args;
+export function validateFetchArgs(
+  args: string | FetchArgs
+): { ok: true; args: string | FetchArgs } | { ok: false; message: string } {
+  if (typeof args === "string") return { ok: true, args };
 
   const method = String(args.method || "GET").toUpperCase();
   if (!["POST", "PUT", "PATCH"].includes(method) || args.body == null) {
-    return args;
+    return { ok: true, args };
   }
 
   if (typeof FormData !== "undefined" && args.body instanceof FormData) {
-    return { ...args, body: sanitizeFormData(args.body) };
+    const badField = validateFormDataStrings(args.body);
+    if (badField) return { ok: false, message: DANGEROUS_INPUT_MESSAGE };
+    return { ok: true, args };
   }
 
   if (typeof args.body === "string") {
     try {
       const parsed = JSON.parse(args.body);
-      return { ...args, body: JSON.stringify(sanitizeRequestPayload(parsed)) };
+      const badField = findDangerousPlainTextInValue(parsed);
+      if (badField) return { ok: false, message: DANGEROUS_INPUT_MESSAGE };
     } catch {
-      return { ...args, body: sanitizePlainTextInput(args.body) };
+      if (containsDangerousPlainText(args.body)) {
+        return { ok: false, message: DANGEROUS_INPUT_MESSAGE };
+      }
     }
+    return { ok: true, args };
   }
 
   if (typeof args.body === "object") {
-    return { ...args, body: sanitizeRequestPayload(args.body) };
+    const badField = findDangerousPlainTextInValue(args.body);
+    if (badField) return { ok: false, message: DANGEROUS_INPUT_MESSAGE };
   }
 
+  return { ok: true, args };
+}
+
+/** @deprecated Use validateFetchArgs in the API client instead of mutating payloads. */
+export function sanitizeRequestPayload<T>(value: T, depth = 0): T {
+  return value;
+}
+
+/** @deprecated Use validateFetchArgs in the API client instead of mutating payloads. */
+export function sanitizeFormData(formData: FormData): FormData {
+  return formData;
+}
+
+/** @deprecated Use validateFetchArgs in the API client instead of mutating payloads. */
+export function sanitizeFetchArgs(args: string | FetchArgs): string | FetchArgs {
   return args;
 }

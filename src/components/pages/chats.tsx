@@ -663,7 +663,12 @@ export function ChatsPage() {
       return true;
     } catch (err) {
       console.error("Failed to send Firestore message:", err);
-      toast.error(payload.messageType === "image" ? "Failed to send image" : "Failed to send message");
+      const message =
+        err instanceof Error && err.message ? err.message : null;
+      toast.error(
+        message ||
+          (payload.messageType === "image" ? "Failed to send image" : "Failed to send message")
+      );
       return false;
     }
   };

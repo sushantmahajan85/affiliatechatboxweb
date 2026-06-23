@@ -85,8 +85,9 @@ export function ConnectionRequestModal() {
         dispatch(closeConnectionModal());
         setMessage("Hi, I'd like to connect with you!");
         router.push(`/chats?userId=${connectionTargetId}`);
-      } catch {
-        toast.error("Failed to send connection request. Please try again.");
+      } catch (err) {
+        const message = err instanceof Error && err.message ? err.message : null;
+        toast.error(message || "Failed to send connection request. Please try again.");
       } finally {
         setFbSending(false);
       }

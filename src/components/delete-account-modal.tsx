@@ -43,7 +43,7 @@ const CONSEQUENCES = [
   },
   {
     icon: FiMessageCircle,
-    text: "All your posts and chat conversations will be permanently deleted.",
+    text: "You will be signed out and unable to sign in again with this account.",
   },
   {
     icon: FiShield,
@@ -142,8 +142,8 @@ export function DeleteAccountModal({
                   Delete your account?
                 </DialogTitle>
                 <DialogDescription className="text-[13px] leading-relaxed text-[#64748B]">
-                  This permanently removes your profile, posts, chat history, and
-                  connections. This action cannot be undone.
+                  This deactivates your account, removes you from the member directory,
+                  and signs you out. You will not be able to sign in again.
                 </DialogDescription>
               </DialogHeader>
 
@@ -326,7 +326,7 @@ export function DeleteAccountModal({
                   ) : (
                     <>
                       <FiTrash2 className="h-4 w-4" />
-                      Delete permanently
+                      Delete account
                     </>
                   )}
                 </button>

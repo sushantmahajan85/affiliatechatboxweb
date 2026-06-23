@@ -3,7 +3,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query';
 import { logout } from '@/store/authSlice';
 import { toast } from 'sonner';
-import { sanitizeFetchArgs } from '@/lib/sanitize-plain-text';
+import { validateFetchArgs } from '@/lib/sanitize-plain-text';
 
 const rawBaseQuery = fetchBaseQuery({
   baseUrl: getApiBaseUrl('http://localhost:8000'),
@@ -21,9 +21,26 @@ const baseQueryWithAccountGuard: BaseQueryFn<
   unknown,
   FetchBaseQueryError
 > = async (args, api, extraOptions) => {
-  const sanitizedArgs = sanitizeFetchArgs(args);
-  const result = await rawBaseQuery(sanitizedArgs, api, extraOptions);
-  const code = (result.error?.data as { code?: string } | undefined)?.code;
+  const validation = validateFetchArgs(args);
+  if (!validation.ok) {
+    toast.error(validation.message);
+    return {
+      error: {
+        status: 400,
+        data: { message: validation.message, code: 'invalid_input' },
+      },
+    };
+  }
+
+  const result = await rawBaseQuery(validation.args, api, extraOptions);
+  const code = (result.error?.data as { code?: string; message?: string } | undefined)?.code;
+
+  if (result.error?.status === 400 && code === 'invalid_input') {
+    const message =
+      (result.error.data as { message?: string } | undefined)?.message ||
+      'Input contains characters that are not allowed.';
+    toast.error(message);
+  }
 
   if (
     result.error?.status === 403 &&
@@ -32,6 +49,8 @@ const baseQueryWithAccountGuard: BaseQueryFn<
     api.dispatch(logout());
     if (code === 'account_suspended') {
       toast.error('Your account has been suspended. Contact support for assistance.');
+    } else if (code === 'account_deleted') {
+      toast.error('Your account has been deleted.');
     }
   }
 

@@ -1,6 +1,9 @@
 import type { Firestore } from "firebase/firestore";
 import { notifyFirestoreChatPush } from "@/lib/chat-push-notify";
-import { sanitizePlainTextInput } from "@/lib/sanitize-plain-text";
+import {
+  containsDangerousPlainText,
+  DANGEROUS_INPUT_MESSAGE,
+} from "@/lib/sanitize-plain-text";
 import {
   collection,
   doc,
@@ -175,6 +178,13 @@ export function subscribeChatRoomDoc(
   );
 }
 
+function assertSafeChatMessage(message: string): string {
+  if (containsDangerousPlainText(message)) {
+    throw new Error(DANGEROUS_INPUT_MESSAGE);
+  }
+  return message;
+}
+
 export async function sendFirestoreChatMessage(
   db: Firestore,
   params: {
@@ -188,7 +198,7 @@ export async function sendFirestoreChatMessage(
   }
 ): Promise<string> {
   const { currentUserId, receiverId, message, messageType, imageUrl, audioUrl, authToken } = params;
-  const safeMessage = sanitizePlainTextInput(message);
+  const safeMessage = assertSafeChatMessage(message);
   const chatRoomId = buildChatRoomId(currentUserId, receiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 
@@ -259,7 +269,7 @@ export async function sendFirestoreAdminMessage(
   }
 ): Promise<string> {
   const { currentUserId, adminReceiverId, message, messageType, imageUrl, authToken } = params;
-  const safeMessage = sanitizePlainTextInput(message);
+  const safeMessage = assertSafeChatMessage(message);
   const chatRoomId = buildChatRoomId(currentUserId, adminReceiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 

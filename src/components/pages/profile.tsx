@@ -20,7 +20,6 @@ import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { getLinkedinChatBlockReason, isSelfChatPartner } from "@/lib/linkedin-messaging";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
-import { sanitizePlainTextInput } from "@/lib/sanitize-plain-text";
 import { 
   FiAlertCircle, 
   FiBriefcase, 
@@ -326,6 +325,7 @@ export function ProfilePage({ id }: { id?: string }) {
       toast.success("Profile updated.");
     } catch (err) {
       console.error("Failed to update profile:", err);
+      if ((err as { data?: { code?: string } })?.data?.code === "invalid_input") return;
       toast.error(
         (err as { data?: { message?: string } })?.data?.message ||
           "Failed to update profile."
@@ -448,7 +448,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.firstName}
-                    onChange={(e) => setEditValues({ ...editValues, firstName: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, firstName: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                   />
                 </div>
@@ -457,7 +457,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.lastName}
-                    onChange={(e) => setEditValues({ ...editValues, lastName: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, lastName: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                   />
                 </div>
@@ -495,7 +495,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.location}
-                    onChange={(e) => setEditValues({ ...editValues, location: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, location: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="City or region (optional)"
                   />
@@ -504,7 +504,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Bio</label>
                   <textarea 
                     value={editValues.bio}
-                    onChange={(e) => setEditValues({ ...editValues, bio: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, bio: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4] h-20 resize-none"
                   />
                 </div>
@@ -513,7 +513,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.company}
-                    onChange={(e) => setEditValues({ ...editValues, company: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, company: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="e.g. Acme Corp"
                   />
@@ -523,7 +523,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.designation}
-                    onChange={(e) => setEditValues({ ...editValues, designation: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, designation: e.target.value })}
                     className="w-full px-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="e.g. Software Engineer"
                   />
@@ -620,7 +620,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.linkedin}
-                    onChange={(e) => setEditValues({ ...editValues, linkedin: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, linkedin: e.target.value })}
                     className="w-full pl-10 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="Username or Profile URL"
                   />
@@ -640,7 +640,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.instagram}
-                    onChange={(e) => setEditValues({ ...editValues, instagram: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, instagram: e.target.value })}
                     className="w-full pl-10 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="Username"
                   />
@@ -660,7 +660,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.telegram}
-                    onChange={(e) => setEditValues({ ...editValues, telegram: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, telegram: e.target.value })}
                     className="w-full pl-10 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="Username"
                   />
@@ -682,7 +682,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.facebook}
-                    onChange={(e) => setEditValues({ ...editValues, facebook: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, facebook: e.target.value })}
                     className="w-full pl-10 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="Username or URL"
                   />
@@ -702,7 +702,7 @@ export function ProfilePage({ id }: { id?: string }) {
                   <input 
                     type="text" 
                     value={editValues.skype}
-                    onChange={(e) => setEditValues({ ...editValues, skype: sanitizePlainTextInput(e.target.value) })}
+                    onChange={(e) => setEditValues({ ...editValues, skype: e.target.value })}
                     className="w-full pl-10 pr-3 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg text-sm focus:outline-none focus:border-[#0A7EA4]"
                     placeholder="Teams ID"
                   />
@@ -729,7 +729,7 @@ export function ProfilePage({ id }: { id?: string }) {
               <input 
                 type="email" 
                 value={editValues.email}
-                onChange={(e) => setEditValues({ ...editValues, email: sanitizePlainTextInput(e.target.value) })}
+                onChange={(e) => setEditValues({ ...editValues, email: e.target.value })}
                 className="text-sm font-medium text-[#1A1A1A] bg-[#F8FAFC] border border-[#E2E8F0] rounded px-2 py-1 text-right focus:outline-none focus:border-[#0A7EA4] flex-1 ml-4"
               />
             ) : (
@@ -996,8 +996,8 @@ export function ProfilePage({ id }: { id?: string }) {
                   <div className="min-w-0">
                     <h3 className="font-bold text-[#1A1A2E]">Delete account</h3>
                     <p className="text-[13px] text-[#64748B] mt-1 leading-relaxed">
-                      Permanently remove your profile, posts, and chats. You&apos;ll
-                      need to verify with a code sent to your email.
+                      Deactivate your account and remove your profile from the member
+                      directory. You&apos;ll need to verify with a code sent to your email.
                     </p>
                   </div>
                 </div>

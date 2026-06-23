@@ -185,6 +185,7 @@ export function CreatePost() {
       setShareToLinkedin(canShareToLinkedin);
       removeFile();
     } catch (err: any) {
+      if (err?.data?.code === "invalid_input") return;
       toast.error(err?.data?.message || "Failed to create post. Please try again.");
     }
   };
