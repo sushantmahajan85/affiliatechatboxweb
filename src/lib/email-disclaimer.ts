@@ -1,5 +1,4 @@
 import { getSiteUrl } from "./site-url";
-import { EMAIL_PROMO_ICON_DATA_URIS } from "./email-promo-icons";
 
 const WEB_APP_ORIGIN = getSiteUrl();
 
@@ -13,25 +12,33 @@ export const IPHONE_APP_URL =
   "https://apps.apple.com/app/affiliate-chat-box/id6477887051";
 export const NEW_POST_EMAIL_SUBJECT = "New posting update on Affiliatechatbox.com";
 
-function affiliatePromoIconLink(href: string, iconSrc: string, label: string): string {
+function affiliatePromoIconLink(
+  href: string,
+  { bg, glyph, label, fontSize = "18" }: { bg: string; glyph: string; label: string; fontSize?: string }
+): string {
   return `
-    <td align="center" valign="top" style="padding:0 10px;">
-      <a href="${href}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-block;">
-        <img src="${iconSrc}" width="48" height="48" alt="${label}" style="display:block;margin:0 auto 8px;border:0;border-radius:12px;" />
-        <span style="display:block;font-size:12px;line-height:1.3;color:#475569;font-family:'Segoe UI',Arial,sans-serif;font-weight:600;">${label}</span>
+    <td align="center" valign="top" style="padding:0 12px;">
+      <a href="${href}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:#475569;font-family:Arial,Helvetica,sans-serif;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto 8px;">
+          <tr>
+            <td align="center" valign="middle" width="48" height="48" bgcolor="${bg}" style="background-color:${bg};border-radius:12px;">
+              <span style="color:#ffffff;font-size:${fontSize}px;font-weight:700;font-family:Arial,Helvetica,sans-serif;line-height:48px;display:block;width:48px;text-align:center;">${glyph}</span>
+            </td>
+          </tr>
+        </table>
+        <span style="display:block;font-size:12px;line-height:1.3;color:#475569;font-weight:600;">${label}</span>
       </a>
     </td>`;
 }
 
 function affiliatePromoIconRowHtml(): string {
-  const icons = EMAIL_PROMO_ICON_DATA_URIS;
   return `
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:20px auto 0;">
       <tr>
-        ${affiliatePromoIconLink(LINKEDIN_COMPANY_POSTS_URL, icons.linkedin, "LinkedIn")}
-        ${affiliatePromoIconLink(WEB_LOGIN_URL, icons.web, "Web Signup")}
-        ${affiliatePromoIconLink(ANDROID_APP_URL, icons.googlePlay, "Android")}
-        ${affiliatePromoIconLink(IPHONE_APP_URL, icons.apple, "iPhone")}
+        ${affiliatePromoIconLink(LINKEDIN_COMPANY_POSTS_URL, { bg: "#0A66C2", glyph: "in", label: "LinkedIn", fontSize: "17" })}
+        ${affiliatePromoIconLink(WEB_LOGIN_URL, { bg: "#0A7EA4", glyph: "www", label: "Web Signup", fontSize: "11" })}
+        ${affiliatePromoIconLink(ANDROID_APP_URL, { bg: "#01875F", glyph: "&#9654;", label: "Android", fontSize: "18" })}
+        ${affiliatePromoIconLink(IPHONE_APP_URL, { bg: "#111827", glyph: "iOS", label: "iPhone", fontSize: "11" })}
       </tr>
     </table>`;
 }
