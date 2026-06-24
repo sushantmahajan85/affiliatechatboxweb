@@ -1,8 +1,50 @@
-const WEB_APP_ORIGIN =
-  process.env.NEXT_PUBLIC_WEB_APP_ORIGIN?.replace(/\/+$/, "") ||
-  "https://affiliatechatbox.com";
+import { getSiteUrl } from "./site-url";
+import { EMAIL_PROMO_ICON_DATA_URIS } from "./email-promo-icons";
+
+const WEB_APP_ORIGIN = getSiteUrl();
 
 export const ACCOUNT_SETTINGS_URL = `${WEB_APP_ORIGIN}/settings`;
+export const LINKEDIN_COMPANY_POSTS_URL =
+  "https://www.linkedin.com/company/affiliatechatbox/posts/";
+export const WEB_LOGIN_URL = `${WEB_APP_ORIGIN}/login`;
+export const ANDROID_APP_URL =
+  "https://play.google.com/store/apps/details?id=com.project.omd";
+export const IPHONE_APP_URL =
+  "https://apps.apple.com/app/affiliate-chat-box/id6477887051";
+export const NEW_POST_EMAIL_SUBJECT = "New posting update on Affiliatechatbox.com";
+
+function affiliatePromoIconLink(href: string, iconSrc: string, label: string): string {
+  return `
+    <td align="center" valign="top" style="padding:0 10px;">
+      <a href="${href}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-block;">
+        <img src="${iconSrc}" width="48" height="48" alt="${label}" style="display:block;margin:0 auto 8px;border:0;border-radius:12px;" />
+        <span style="display:block;font-size:12px;line-height:1.3;color:#475569;font-family:'Segoe UI',Arial,sans-serif;font-weight:600;">${label}</span>
+      </a>
+    </td>`;
+}
+
+function affiliatePromoIconRowHtml(): string {
+  const icons = EMAIL_PROMO_ICON_DATA_URIS;
+  return `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:20px auto 0;">
+      <tr>
+        ${affiliatePromoIconLink(LINKEDIN_COMPANY_POSTS_URL, icons.linkedin, "LinkedIn")}
+        ${affiliatePromoIconLink(WEB_LOGIN_URL, icons.web, "Web Signup")}
+        ${affiliatePromoIconLink(ANDROID_APP_URL, icons.googlePlay, "Android")}
+        ${affiliatePromoIconLink(IPHONE_APP_URL, icons.apple, "iPhone")}
+      </tr>
+    </table>`;
+}
+
+export function affiliatePromoSectionHtml(): string {
+  return `
+    <div style="margin:28px 0 0;padding:20px;background:#f0f9fc;border:1px solid #d0e8f0;border-radius:8px;text-align:center;">
+      <p style="margin:0 0 8px;font-size:15px;color:#333;font-weight:600;">Connect with Global Affiliates Online now.</p>
+      <p style="margin:0 0 4px;font-size:14px;color:#555;">Follow updates on LinkedIn and get the app on any device.</p>
+      <p style="margin:0 0 4px;font-size:14px;color:#0A7EA4;font-weight:600;">#Affiliatechatbox</p>
+      ${affiliatePromoIconRowHtml()}
+    </div>`;
+}
 
 export function accountSettingsLinkHtml(label = "account settings"): string {
   return `<a href="${ACCOUNT_SETTINGS_URL}" style="color:#0A7EA4;text-decoration:underline;">${label}</a>`;

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { appendEmailDisclaimer, emailPreferencesFooterHtml } from "@/lib/email-disclaimer";
+import { appendEmailDisclaimer, affiliatePromoSectionHtml, emailPreferencesFooterHtml, NEW_POST_EMAIL_SUBJECT, WEB_LOGIN_URL } from "@/lib/email-disclaimer";
 
 const BRAND = "#0A7EA4";
 
@@ -26,6 +26,7 @@ const templates = [
           <div style="text-align:center;margin-top:32px;">
             <a href="https://affiliatechatbox.com/chats" style="background-color:#0A7EA4;color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;display:inline-block;">Reply Now</a>
           </div>
+          ${affiliatePromoSectionHtml()}
         </div>
         <div style="background-color:#fcfcfc;padding:20px;text-align:center;border-top:1px solid #f0f0f0;">
           ${emailPreferencesFooterHtml({ automated: true })}
@@ -49,6 +50,7 @@ const templates = [
           <p style="color:#555;">Thank you!</p>
           <br/>
           <p style="color:#888;">This email was sent automatically. Please do not reply to this email.</p>
+          ${affiliatePromoSectionHtml()}
           <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;">
             ${emailPreferencesFooterHtml({ automated: true })}
           </div>
@@ -60,21 +62,22 @@ const templates = [
     id: "new_post_users",
     label: "New Post — All Users",
     trigger: "POST /api/email/newPostEmail — called by admin approve flow to notify all verified users.",
-    subject: "New Posting Notification",
+    subject: NEW_POST_EMAIL_SUBJECT,
     recipient: "All verified users with email notifications enabled",
     html: `
       <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;">
         <div style="background-color:#0A7EA4;padding:24px;text-align:center;">
-          <h1 style="color:#fff;margin:0;font-size:22px;">New Post on Affiliate Chat Box</h1>
+          <h1 style="color:#fff;margin:0;font-size:22px;">New posting update on Affiliatechatbox.com</h1>
         </div>
         <div style="padding:32px;background:#fff;">
           <p style="font-size:16px;color:#333;">Hello <strong>Sarah</strong>,</p>
           <p style="font-size:15px;color:#555;">A new post has been published by <strong>John Doe</strong>:</p>
           <div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #0A7EA4;border-radius:4px;">
-            <p style="margin:0;color:#4a5568;">Looking for affiliate partners in the health &amp; wellness niche. DM me if interested!</p>
+            <p style="margin:0;color:#4a5568;white-space:pre-wrap;">Looking for affiliate partners in the health &amp; wellness niche. DM me if interested!</p>
           </div>
+          ${affiliatePromoSectionHtml()}
           <div style="text-align:center;margin-top:28px;">
-            <a href="https://affiliatechatbox.com" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View Post</a>
+            <a href="${WEB_LOGIN_URL}" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View on Affiliatechatbox.com</a>
           </div>
         </div>
         <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
@@ -106,6 +109,7 @@ const templates = [
           <div style="text-align:center;">
             <a href="https://affiliatechatbox.com/partners" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View Partners</a>
           </div>
+          ${affiliatePromoSectionHtml()}
         </div>
         <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
           ${emailPreferencesFooterHtml()}
@@ -133,6 +137,7 @@ const templates = [
           <div style="text-align:center;margin-top:28px;">
             <a href="https://dev-affadmin.netlify.app/Admin/AdminDashboard/Posts" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">Review Post</a>
           </div>
+          ${affiliatePromoSectionHtml()}
         </div>
         <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
           <p style="font-size:12px;color:#94a3b8;margin:0;">Affiliate Chat Box — automated notification</p>
@@ -161,6 +166,7 @@ const templates = [
           <p style="color:#555;">Thank you!</p>
           <br/>
           <p style="color:#888;">This email was sent automatically. Please do not reply to this email.</p>
+          ${affiliatePromoSectionHtml()}
         </div>
       </div>`,
     variables: ["reporterName", "postContent", "postUserName", "reportReason"],
@@ -181,6 +187,7 @@ const templates = [
           <p style="color:#555;">Thank you!</p>
           <br/>
           <p style="color:#888;">This email was sent automatically. Please do not reply to this email.</p>
+          ${affiliatePromoSectionHtml()}
         </div>
       </div>`,
     variables: ["none — static content"],
