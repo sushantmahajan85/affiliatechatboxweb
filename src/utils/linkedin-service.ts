@@ -15,9 +15,9 @@ export const sharePostOnLinkedIn = async (
   const url = `${getApiBaseUrl()}/api/posts/share-on-linkedin`;
 
   const body = {
-    postContent: `\n\n${postContent}\n\nI am using #affiliatechatbox`,
+    postContent,
     accessToken,
-    linkedinID
+    linkedinID,
   };
 
   try {
