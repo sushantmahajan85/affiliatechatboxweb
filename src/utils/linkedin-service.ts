@@ -3,7 +3,8 @@ import { getApiBaseUrl } from "@/lib/api-base-url";
 export const sharePostOnLinkedIn = async (
   postContent: string,
   accessToken: string,
-  linkedinID: string
+  linkedinID: string,
+  postId?: string
 ) => {
   if (!linkedinID || !accessToken) {
     return {
@@ -14,11 +15,14 @@ export const sharePostOnLinkedIn = async (
 
   const url = `${getApiBaseUrl()}/api/posts/share-on-linkedin`;
 
-  const body = {
+  const body: Record<string, string> = {
     postContent,
     accessToken,
     linkedinID,
   };
+  if (postId) {
+    body.postId = postId;
+  }
 
   try {
     const response = await fetch(url, {
@@ -36,17 +40,17 @@ export const sharePostOnLinkedIn = async (
         success: true,
         data: "Post shared successfully on LinkedIn!",
       };
-    } else {
-      return {
-        success: false,
-        data: result.message || "Failed to share post on LinkedIn via proxy.",
-      };
     }
-  } catch (error: any) {
-    console.error("Error while sharing post to LinkedIn proxy:", error);
     return {
       success: false,
-      data: error.message || "Error while connecting to the server. Try again later.",
+      data: result.message || "Failed to share post on LinkedIn via proxy.",
+    };
+  } catch (error: unknown) {
+    console.error("Error while sharing post to LinkedIn proxy:", error);
+    const message = error instanceof Error ? error.message : "Error while connecting to the server. Try again later.";
+    return {
+      success: false,
+      data: message,
     };
   }
 };

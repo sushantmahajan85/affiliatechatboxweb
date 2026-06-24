@@ -154,15 +154,17 @@ export function CreatePost() {
         formData.append("postMedia", file);
       }
 
-      await addPost({ userId: user!._id, formData }).unwrap();
-      
+      const created = await addPost({ userId: user!._id, formData }).unwrap();
+      const newPostId = created?.newPost?._id as string | undefined;
+
       // Handle LinkedIn sharing if enabled
       if (canShareToLinkedin && shareToLinkedin) {
         if (user?.linkedInAccessToken && user?.linkedInId) {
           const linkedinResult = await sharePostOnLinkedIn(
             content,
             user.linkedInAccessToken,
-            user.linkedInId
+            user.linkedInId,
+            newPostId
           );
           if (linkedinResult.success) {
             toast.success("Also shared to your LinkedIn profile!");
