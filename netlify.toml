@@ -1,3 +1,26 @@
 [build.environment]
   # Firebase web SDK exposes NEXT_PUBLIC_* keys in bundles; Netlify smart scan treats AIza* as secrets.
   SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://www.googleapis.com https://apis.google.com https://accounts.google.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' https: blob:; connect-src 'self' https://online-media-tools-server-vercel.vercel.app https://online-media-tools-server-vercel.onrender.com https://*.googleapis.com https://*.firebaseio.com https://*.firebase.googleapis.com wss://*.firebaseio.com https://accounts.google.com https://www.googleapis.com https://flagcdn.com https://onlinemediadeals.s3.eu-north-1.amazonaws.com https://lh3.googleusercontent.com https://media.licdn.com https://static.cloudflareinsights.com https://assets.mixkit.co; frame-src 'self' https://accounts.google.com https://www.linkedin.com https://*.firebaseapp.com; worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests"
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    X-Powered-By = ""
+
+[[redirects]]
+  from = "http://affiliatechatbox.com/*"
+  to = "https://affiliatechatbox.com/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "http://www.affiliatechatbox.com/*"
+  to = "https://affiliatechatbox.com/:splat"
+  status = 301
+  force = true

@@ -4,6 +4,7 @@ import { useGetConversationsQuery } from "@/store/endpoints/chats";
 import { useGetChatRequestNotificationsQuery } from "@/store/endpoints/notifications";
 import { useFirebaseChatRoomsContext, useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import { isSelfChatPartner } from "@/lib/linkedin-messaging";
+import { buildInitialsAvatarDataUrl } from "@/lib/user-profile-image";
 
 export type InboxPreviewChat = {
   id: string;
@@ -70,7 +71,7 @@ export function useInboxPreviewChats(): {
         .map((r) => ({
         id: r.partnerId,
         name: "User",
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(r.partnerId.slice(-6))}&background=0A66C2&color=fff`,
+        avatar: buildInitialsAvatarDataUrl(r.partnerId.slice(-6), "0A66C2"),
         lastMsg: r.lastMessage,
         time: r.timestampMs ? new Date(r.timestampMs).toISOString() : null,
         status: "online" as const,

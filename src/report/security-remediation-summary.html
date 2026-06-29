@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Security Report Remediation Summary</title>
+  <style>
+    @page { margin: 2cm; }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: #1a1a2e;
+      line-height: 1.5;
+      font-size: 11pt;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 { font-size: 22pt; border-bottom: 3px solid #0A7EA4; padding-bottom: 8px; }
+    h2 { font-size: 15pt; color: #0A7EA4; margin-top: 28px; page-break-after: avoid; }
+    h3 { font-size: 12pt; margin-top: 18px; page-break-after: avoid; }
+    .meta { color: #555; font-size: 10pt; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 20px; font-size: 10pt; }
+    th, td { border: 1px solid #ccc; padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: #0A7EA4; color: #fff; }
+    tr:nth-child(even) td { background: #f7f9fb; }
+    .status-solved { color: #16a34a; font-weight: bold; }
+    .status-partial { color: #d97706; font-weight: bold; }
+    .status-unsolved { color: #dc2626; font-weight: bold; }
+    .status-info { color: #2563eb; font-weight: bold; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 9pt; font-weight: bold; }
+    .badge-medium { background: #fed7aa; color: #9a3412; }
+    .badge-low { background: #fef08a; color: #854d0e; }
+    .badge-info { background: #dbeafe; color: #1e40af; }
+    ul { margin: 6px 0; padding-left: 20px; }
+    li { margin: 4px 0; }
+    .note { background: #f0f4ff; border-left: 4px solid #0A7EA4; padding: 12px 16px; margin: 16px 0; font-size: 10pt; }
+    .footer { margin-top: 40px; font-size: 9pt; color: #777; border-top: 1px solid #ddd; padding-top: 12px; }
+    @media print {
+      body { padding: 0; }
+      h2 { page-break-before: auto; }
+      table { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>Security Report Remediation Summary</h1>
+<p class="meta">
+  <strong>Project:</strong> Affiliate Chat Box<br />
+  <strong>Reports reviewed:</strong> frontend-security report.html, backend-report.html, security report.pdf<br />
+  <strong>Date:</strong> 29 June 2026<br />
+  <strong>Frontend site:</strong> https://affiliatechatbox.com (affiliatechatboxweb)<br />
+  <strong>Admin site:</strong> https://admin-panel-omd.netlify.app (Online_media_tools_ADMIN_PANEL)
+</p>
+
+<div class="note">
+  <strong>Important:</strong> Code fixes are complete in the repositories. Production sites must be <strong>re-deployed</strong> to Netlify before a new ZAP scan will show improvements. Some alerts come from third-party services (Cloudflare, Google, Netlify) and cannot be removed from application code alone.
+</div>
+
+<h2>1. Executive Summary</h2>
+<table>
+  <tr><th>Category</th><th>Count</th><th>Notes</th></tr>
+  <tr><td>Fully solved in our code</td><td>14</td><td>Headers, avatars, fonts, ELMAH, error pages, HTTPS redirects</td></tr>
+  <tr><td>Partially solved</td><td>3</td><td>CORS on third-party URLs; application error disclosure on RSC routes</td></tr>
+  <tr><td>Not fixable from app code</td><td>6</td><td>Cloudflare cookies, CDN Server headers, third-party CORS, timestamps</td></tr>
+  <tr><td>Informational (no action required)</td><td>7</td><td>localStorage, cache notes, modern web app, fuzzer</td></tr>
+</table>
+
+<h2>2. Frontend Report — affiliatechatbox.com</h2>
+<p>Source: <code>src/report/frontend-security report.html</code> · Repository: <code>affiliatechatboxweb</code></p>
+
+<h3>2.1 Solved Issues</h3>
+<table>
+  <tr><th>Alert</th><th>Risk</th><th>Status</th><th>Fix Applied</th><th>Files Changed</th></tr>
+  <tr>
+    <td>Content Security Policy (CSP) Header Not Set</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>Added CSP via Next.js headers (production) and Netlify <code>[[headers]]</code></td>
+    <td><code>next.config.ts</code>, <code>netlify.toml</code>, <code>src/lib/security-headers.ts</code></td>
+  </tr>
+  <tr>
+    <td>Missing Anti-clickjacking Header</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td><code>X-Frame-Options: DENY</code> and CSP <code>frame-ancestors 'none'</code></td>
+    <td><code>security-headers.ts</code>, <code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>Sub Resource Integrity Attribute Missing</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>Removed external ui-avatars.com; replaced with local SVG data-URI avatars (no external script/link)</td>
+    <td><code>src/lib/user-profile-image.ts</code>, <code>chats.tsx</code>, <code>use-inbox-preview-chats.ts</code></td>
+  </tr>
+  <tr>
+    <td>X-Content-Type-Options Header Missing</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>Added <code>X-Content-Type-Options: nosniff</code></td>
+    <td><code>security-headers.ts</code>, <code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>Strict-Transport-Security Header Not Set</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>Added HSTS header (production only) with 2-year max-age</td>
+    <td><code>security-headers.ts</code>, <code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>Server Leaks Information via X-Powered-By</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td><code>poweredByHeader: false</code> in Next.js; empty X-Powered-By on Netlify</td>
+    <td><code>next.config.ts</code>, <code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>HTTPS Content Available via HTTP</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>HTTP → HTTPS 301 redirects in Netlify for affiliatechatbox.com</td>
+    <td><code>netlify.toml</code></td>
+  </tr>
+</table>
+
+<h3>2.2 Partially Solved</h3>
+<table>
+  <tr><th>Alert</th><th>Risk</th><th>Status</th><th>What we did</th><th>What remains</th></tr>
+  <tr>
+    <td>Cross-Domain Misconfiguration (CORS)</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-partial">PARTIAL</td>
+    <td>Removed ui-avatars.com dependency from our pages</td>
+    <td>Scanner still flags Cloudflare <code>/cdn-cgi/*</code>, Google, Mozilla CDN — these are third-party servers with <code>Access-Control-Allow-Origin: *</code></td>
+  </tr>
+  <tr>
+    <td>Application Error Disclosure</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-partial">PARTIAL</td>
+    <td>Added generic <code>error.tsx</code>, <code>global-error.tsx</code>, <code>not-found.tsx</code></td>
+    <td>Scanner saw HTTP 500 on <code>/directory?_rsc=...</code> and <code>/terms-of-service?_rsc=...</code> — may still appear if underlying server errors occur during scan</td>
+  </tr>
+</table>
+
+<h3>2.3 Not Fixable From Application Code</h3>
+<table>
+  <tr><th>Alert</th><th>Risk</th><th>Why not fixable</th><th>How it could be addressed</th></tr>
+  <tr>
+    <td>Cookie with SameSite Attribute None</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td>Set by <strong>Cloudflare</strong> (<code>cf_clearance</code> cookie), not our app</td>
+    <td>Cloudflare Dashboard → SSL/TLS settings; review Bot Fight Mode / challenge settings. SameSite=None is required for cross-site Cloudflare challenges — usually accepted as low risk.</td>
+  </tr>
+  <tr>
+    <td>Server Leaks Version via Server Header</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td>Returned by <strong>Cloudflare / CDN</strong>, not Next.js</td>
+    <td>Cloudflare → Transform Rules → remove or override Server header (Enterprise feature). Or accept as informational from CDN.</td>
+  </tr>
+  <tr>
+    <td>Strict-Transport-Security on third-party URLs</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td>Scanner checked Google, Cloudflare, Mozilla URLs — not our domain</td>
+    <td>No action needed. These are external services.</td>
+  </tr>
+  <tr>
+    <td>Timestamp Disclosure - Unix</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td>Unix timestamps in API JSON responses (createdAt, updatedAt) — normal application data</td>
+    <td>Could obfuscate dates in API (not recommended — breaks features). Document as accepted false positive for REST APIs.</td>
+  </tr>
+  <tr>
+    <td>Cross-Domain CORS on cdn-cgi / Google / Mozilla</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td>Third-party domains control their own CORS headers</td>
+    <td>Cannot change Google or Cloudflare CORS. Reduce third-party dependencies where possible (already done for avatars).</td>
+  </tr>
+</table>
+
+<h3>2.4 Informational — No Action Required</h3>
+<table>
+  <tr><th>Alert</th><th>Notes</th></tr>
+  <tr><td>Information Disclosure - localStorage</td><td>Stores UI preference (<code>featured-posts-visible:guest</code>). Report states: informational, no action necessary.</td></tr>
+  <tr><td>Re-examine Cache-control Directives</td><td>Informational caching review. Optional: tune cache headers for static assets (partially done).</td></tr>
+  <tr><td>Retrieved from Cache</td><td>Informational — indicates CDN/browser caching is working.</td></tr>
+</table>
+
+<h2>3. Backend / Admin Report — admin-panel-omd.netlify.app</h2>
+<p>Source: <code>src/report/backend-report.html</code> · Repository: <code>Online_media_tools_ADMIN_PANEL</code></p>
+
+<h3>3.1 Solved Issues</h3>
+<table>
+  <tr><th>Alert</th><th>Risk</th><th>Status</th><th>Fix Applied</th><th>Files Changed</th></tr>
+  <tr>
+    <td>Content Security Policy (CSP) Header Not Set</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>Full CSP added via Netlify headers</td>
+    <td><code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>ELMAH Information Leak</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>SPA was returning 200 for <code>/elmah.axd</code>. Now forced 404 via Netlify redirect</td>
+    <td><code>netlify.toml</code>, <code>public/404.html</code></td>
+  </tr>
+  <tr>
+    <td>Missing Anti-clickjacking Header</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td><code>X-Frame-Options: DENY</code> + CSP <code>frame-ancestors 'none'</code></td>
+    <td><code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>Sub Resource Integrity Attribute Missing</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>Removed Google Fonts external links; switched to system font stacks</td>
+    <td><code>public/index.html</code>, <code>_variables.scss</code>, <code>App.css</code></td>
+  </tr>
+  <tr>
+    <td>X-Content-Type-Options Header Missing</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td><code>nosniff</code> header added</td>
+    <td><code>netlify.toml</code></td>
+  </tr>
+  <tr>
+    <td>Strict-Transport-Security Header Not Set</td>
+    <td><span class="badge badge-low">Low</span></td>
+    <td class="status-solved">SOLVED</td>
+    <td>HSTS header added on all admin routes</td>
+    <td><code>netlify.toml</code></td>
+  </tr>
+</table>
+
+<h3>3.2 Partially Solved</h3>
+<table>
+  <tr><th>Alert</th><th>Risk</th><th>What we did</th><th>What remains</th></tr>
+  <tr>
+    <td>Cross-Domain Misconfiguration (CORS)</td>
+    <td><span class="badge badge-medium">Medium</span></td>
+    <td>Removed Google Fonts from our HTML</td>
+    <td>Scanner still flags <code>fonts.googleapis.com</code> and <code>firefox.settings.services.mozilla.com</code> if browser prefetches them — third-party CORS</td>
+  </tr>
+</table>
+
+<h3>3.3 Not Fixable From Application Code</h3>
+<table>
+  <tr><th>Alert</th><th>Why not fixable</th><th>How it could be addressed</th></tr>
+  <tr>
+    <td>Server Leaks Version via Server Header</td>
+    <td>Netlify infrastructure sets Server header</td>
+    <td>Netlify does not allow custom Server header removal on free tier. Accept or use custom origin proxy.</td>
+  </tr>
+  <tr>
+    <td>Timestamp Disclosure - Unix</td>
+    <td>API responses contain Unix timestamps</td>
+    <td>Document as accepted. Obfuscating timestamps is not recommended.</td>
+  </tr>
+  <tr>
+    <td>HSTS on third-party URLs</td>
+    <td>External Google/Mozilla endpoints scanned by ZAP</td>
+    <td>No action — not our domains.</td>
+  </tr>
+</table>
+
+<h3>3.4 Informational — No Action Required</h3>
+<table>
+  <tr><th>Alert</th><th>Notes</th></tr>
+  <tr><td>Modern Web Application</td><td>Informational — confirms SPA/React architecture.</td></tr>
+  <tr><td>Re-examine Cache-control Directives</td><td>Informational caching review.</td></tr>
+  <tr><td>Retrieved from Cache</td><td>Informational — CDN caching detected.</td></tr>
+  <tr><td>User Agent Fuzzer</td><td>Informational — scanner probe, not a vulnerability.</td></tr>
+</table>
+
+<h2>4. Deployment Checklist</h2>
+<ol>
+  <li>Deploy <strong>affiliatechatboxweb</strong> to Netlify (affiliatechatbox.com)</li>
+  <li>Deploy <strong>Online_media_tools_ADMIN_PANEL</strong> to Netlify (admin-panel-omd.netlify.app)</li>
+  <li>Verify headers: <code>curl -I https://affiliatechatbox.com</code> — check CSP, HSTS, X-Frame-Options</li>
+  <li>Verify admin ELMAH blocked: <code>curl -I https://admin-panel-omd.netlify.app/elmah.axd</code> — expect 404</li>
+  <li>Re-run ZAP scan on both URLs</li>
+  <li>Document remaining third-party findings as accepted risks in your security policy</li>
+</ol>
+
+<h2>5. Files Modified (Reference)</h2>
+<h3>affiliatechatboxweb</h3>
+<ul>
+  <li><code>next.config.ts</code> — security headers (production), hide X-Powered-By</li>
+  <li><code>netlify.toml</code> — headers + HTTP→HTTPS redirects</li>
+  <li><code>src/lib/security-headers.ts</code> — CSP and header definitions</li>
+  <li><code>src/lib/user-profile-image.ts</code> — local SVG avatars</li>
+  <li><code>src/app/error.tsx</code>, <code>global-error.tsx</code>, <code>not-found.tsx</code></li>
+  <li><code>src/components/pages/chats.tsx</code>, <code>src/hooks/use-inbox-preview-chats.ts</code></li>
+</ul>
+<h3>Online_media_tools_ADMIN_PANEL</h3>
+<ul>
+  <li><code>netlify.toml</code> — headers, ELMAH block, SPA fallback</li>
+  <li><code>public/404.html</code> — custom 404 page</li>
+  <li><code>public/index.html</code> — removed Google Fonts</li>
+  <li><code>src/components/Admin Dashboard/assets/scss/_variables.scss</code> — system fonts</li>
+  <li><code>src/App.css</code> — system serif fonts</li>
+</ul>
+
+<div class="footer">
+  Generated for Affiliate Chat Box security remediation · June 2026 ·
+  Based on ZAP by Checkmarx scan reports in src/report/
+</div>
+
+</body>
+</html>

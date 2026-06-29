@@ -15,7 +15,7 @@ import {
   sendFirestoreChatMessage,
   uploadFirestoreChatImage,
 } from "@/lib/firebase-chat";
-import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
+import { buildInitialsAvatarDataUrl, resolveUserProfileImageUrl } from "@/lib/user-profile-image";
 import { useGetProfileQuery } from "@/store/endpoints/auth";
 import { useGetChatHistoryQuery, useGetConversationsQuery, useMarkChatAsReadMutation } from "@/store/endpoints/chats";
 import { useGetChatRequestNotificationsQuery } from "@/store/endpoints/notifications";
@@ -301,7 +301,7 @@ export function ChatsPage() {
         return {
           id: row.partnerId,
           name: "User",
-          avatar: `https://ui-avatars.com/api/?name=U&background=0A7EA4&color=fff`,
+          avatar: buildInitialsAvatarDataUrl("User"),
           online: true,
           lastMessage: row.lastMessage,
           time: row.timestampMs ? formatChatMessageTime(new Date(row.timestampMs)) : "Now",
@@ -334,7 +334,7 @@ export function ChatsPage() {
     return {
       id: selectedChatId,
       name: `User`,
-      avatar: `https://ui-avatars.com/api/?name=U&background=0A7EA4&color=fff`,
+      avatar: buildInitialsAvatarDataUrl("User"),
       online: true,
       lastMessage: "",
       time: "Now",
