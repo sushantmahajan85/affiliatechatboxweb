@@ -1,6 +1,8 @@
 "use client";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
+import { TermsAcceptancePanel } from "@/components/terms-acceptance-panel";
+import { hasAcceptedTerms } from "@/lib/terms-acceptance-preference";
 import { setCredentials } from "@/store/authSlice";
 import { openWalkthroughForNewUser } from "@/lib/walkthrough-preference";
 import {
@@ -11,7 +13,7 @@ import { useAppDispatch } from "@/store/hooks";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import bgImage from "../../../public/assets/authBG.jpg";
 import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
 import { resolveUserProfileImageUrl } from "@/lib/user-profile-image";
@@ -35,10 +37,16 @@ const LinkedInIcon = () => (
 );
 
 export function AuthPage() {
-  const [step, setStep] = useState<"login" | "otp">("login");
+  const [step, setStep] = useState<"terms" | "login" | "otp">("terms");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (hasAcceptedTerms()) {
+      setStep("login");
+    }
+  }, []);
   
   const dispatch = useAppDispatch();
   const router = useRouter();
@@ -188,7 +196,18 @@ export function AuthPage() {
         <div className="flex-1 flex items-center justify-center p-6 bg-white/5 backdrop-blur-sm md:bg-transparent">
           <div className="w-full max-w-[500px] px-4">
             <AnimatePresence mode="wait">
-              {step === "login" ? (
+              {step === "terms" ? (
+                <motion.div
+                  key="terms"
+                  initial={{ opacity: 0, scale: 0.9, x: -50 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, x: 50 }}
+                  transition={{ type: "spring", duration: 0.6, bounce: 0.2 }}
+                  className="w-full bg-white rounded-[32px] p-10 md:p-12 shadow-[0_32px_80px_rgba(0,0,0,0.3)] border border-white relative"
+                >
+                  <TermsAcceptancePanel onAccepted={() => setStep("login")} />
+                </motion.div>
+              ) : step === "login" ? (
                 <motion.div
                   key="login"
                   initial={{ opacity: 0, scale: 0.9, x: -50 }}

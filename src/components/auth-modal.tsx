@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle,
-  DialogDescription
+import {
+  Dialog,
+  DialogContent,
 } from "@/components/ui/dialog";
-import { AlertCircle, ChevronRight, X, Mail } from "lucide-react";
+import { AlertCircle, ChevronRight, Mail } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
+import { TermsAcceptancePanel } from "@/components/terms-acceptance-panel";
+import { hasAcceptedTerms } from "@/lib/terms-acceptance-preference";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
 import { closeAuthModal, setAuthView } from "@/store/uiSlice";
@@ -44,6 +43,19 @@ export function AuthModal() {
   const { isAuthModalOpen, authView } = useAppSelector((state) => state.ui);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsReady, setTermsReady] = useState(false);
+
+  useEffect(() => {
+    setTermsAccepted(hasAcceptedTerms());
+    setTermsReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthModalOpen) {
+      setTermsAccepted(hasAcceptedTerms());
+    }
+  }, [isAuthModalOpen]);
   
   const dispatch = useAppDispatch();
   const router = useRouter();
@@ -121,10 +133,24 @@ export function AuthModal() {
 
   return (
     <Dialog open={isAuthModalOpen} onOpenChange={(open) => !open && dispatch(closeAuthModal())}>
-      <DialogContent className="sm:max-w-[460px] p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
+      <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
         <div className="bg-white p-8 md:p-10">
           <AnimatePresence mode="wait">
-            {authView === 'login' && (
+            {termsReady && !termsAccepted && authView === "login" && (
+              <motion.div
+                key="terms"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+              >
+                <TermsAcceptancePanel
+                  compact
+                  onAccepted={() => setTermsAccepted(true)}
+                />
+              </motion.div>
+            )}
+
+            {termsReady && termsAccepted && authView === 'login' && (
               <motion.div
                 key="login"
                 initial={{ opacity: 0, y: 20 }}
