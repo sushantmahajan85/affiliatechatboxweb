@@ -1,8 +1,8 @@
 "use client";
 
 import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
-import { TermsAcceptancePanel } from "@/components/terms-acceptance-panel";
-import { hasAcceptedTerms } from "@/lib/terms-acceptance-preference";
+import { TermsAgreementCheckbox } from "@/components/terms-agreement-checkbox";
+import { hasAcceptedTerms, markTermsAccepted } from "@/lib/terms-acceptance-preference";
 import { setCredentials } from "@/store/authSlice";
 import { openWalkthroughForNewUser } from "@/lib/walkthrough-preference";
 import {
@@ -13,6 +13,7 @@ import { useAppDispatch } from "@/store/hooks";
 import { AlertCircle, ChevronRight, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useRef, useState, useEffect } from "react";
 import bgImage from "../../../public/assets/authBG.jpg";
 import { getLinkedInAuthUrl } from "@/lib/linkedin-auth";
@@ -37,15 +38,14 @@ const LinkedInIcon = () => (
 );
 
 export function AuthPage() {
-  const [step, setStep] = useState<"terms" | "login" | "otp">("terms");
+  const [step, setStep] = useState<"login" | "otp">("login");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   useEffect(() => {
-    if (hasAcceptedTerms()) {
-      setStep("login");
-    }
+    setTermsAgreed(hasAcceptedTerms());
   }, []);
   
   const dispatch = useAppDispatch();
@@ -67,9 +67,17 @@ export function AuthPage() {
       : "12,000+";
 
   // Real Google Login Implementation
+  const ensureTermsAgreed = (): boolean => {
+    if (termsAgreed) return true;
+    setError("Please accept the Terms of Service and Privacy Policy to continue.");
+    return false;
+  };
+
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
+      if (!ensureTermsAgreed()) return;
       try {
+        markTermsAccepted();
         setError(null);
         // Getting user info from Google's userinfo endpoint 
         // Or if using the standard component, it provides a 'credential' (ID Token)
@@ -100,7 +108,9 @@ export function AuthPage() {
   });
 
   const handleLinkedinLogin = () => {
+    if (!ensureTermsAgreed()) return;
     try {
+      markTermsAccepted();
       setError(null);
       window.location.href = getLinkedInAuthUrl();
     } catch (err: any) {
@@ -196,18 +206,7 @@ export function AuthPage() {
         <div className="flex-1 flex items-center justify-center p-6 bg-white/5 backdrop-blur-sm md:bg-transparent">
           <div className="w-full max-w-[500px] px-4">
             <AnimatePresence mode="wait">
-              {step === "terms" ? (
-                <motion.div
-                  key="terms"
-                  initial={{ opacity: 0, scale: 0.9, x: -50 }}
-                  animate={{ opacity: 1, scale: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, x: 50 }}
-                  transition={{ type: "spring", duration: 0.6, bounce: 0.2 }}
-                  className="w-full bg-white rounded-[32px] p-10 md:p-12 shadow-[0_32px_80px_rgba(0,0,0,0.3)] border border-white relative"
-                >
-                  <TermsAcceptancePanel onAccepted={() => setStep("login")} />
-                </motion.div>
-              ) : step === "login" ? (
+              {step === "login" ? (
                 <motion.div
                   key="login"
                   initial={{ opacity: 0, scale: 0.9, x: -50 }}
@@ -228,10 +227,17 @@ export function AuthPage() {
                     </div>
                   )}
 
+                  <TermsAgreementCheckbox
+                    checked={termsAgreed}
+                    onCheckedChange={setTermsAgreed}
+                    id="auth-page-terms"
+                    className="mb-6"
+                  />
+
                   <div className="space-y-4">
                     <button
                       onClick={() => handleGoogleLogin()}
-                      disabled={isLoading}
+                      disabled={isLoading || !termsAgreed}
                       className="w-full h-[64px] bg-white border-2 border-[#E2E8F0] rounded-[20px] flex items-center justify-center gap-4 text-[16px] font-black text-[#1A1A1A] hover:bg-[#F8FAFC] hover:border-[#0A7EA4] transition-all active:scale-[0.98] disabled:opacity-50"
                     >
                       <GoogleIcon />
@@ -240,7 +246,7 @@ export function AuthPage() {
 
                     <button
                       onClick={handleLinkedinLogin}
-                      disabled={isLoading}
+                      disabled={isLoading || !termsAgreed}
                       className="w-full h-[64px] bg-[#0A66C2] rounded-[20px] flex items-center justify-center gap-4 text-[16px] font-black text-white hover:bg-[#085aae] transition-all active:scale-[0.98] disabled:opacity-50 shadow-md"
                     >
                       <LinkedInIcon />
@@ -270,7 +276,13 @@ export function AuthPage() {
                   <div className="mt-10 pt-10 border-t border-[#F1F5F9] text-center">
                     <p className="text-[13px] text-[#64748B] leading-relaxed font-bold">
                       Protected by industry-standard encryption. <br />
-                      <a href="#" className="text-[#0A7EA4] hover:underline">Privacy Policy</a>
+                      <Link href="/privacy-policy" className="text-[#0A7EA4] hover:underline">
+                        Privacy Policy
+                      </Link>
+                      {" · "}
+                      <Link href="/terms-of-service" className="text-[#0A7EA4] hover:underline">
+                        Terms of Service
+                      </Link>
                     </p>
                   </div>
                 </motion.div>

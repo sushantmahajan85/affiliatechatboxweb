@@ -48,15 +48,12 @@ import { BsMicrosoftTeams } from "react-icons/bs";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CountryFlag } from "@/components/country-flag";
-import {
-  countryCodeToFlagEmoji,
-  countryLabelFromFlag,
-  normalizeCountryCode,
-} from "@/lib/country-flag";
+import { countryLabelFromFlag } from "@/lib/country-flag";
 import { PhoneVerificationModal } from "@/components/PhoneVerification";
 import { DeleteAccountModal } from "@/components/delete-account-modal";
 import { isFirebaseConfigured } from "@/lib/firebase-app";
-import { DEFAULT_COUNTRY_ISO, countryOptionsForIso } from "@/lib/phone-countries";
+import { DEFAULT_COUNTRY_ISO } from "@/lib/phone-countries";
+import { countryIsoFromPhone } from "@/lib/phone-validation";
 import { formatPhoneNumberIntl } from "react-phone-number-input";
 import type { Country } from "react-phone-number-input";
 
@@ -196,9 +193,6 @@ export function ProfilePage({ id }: { id?: string }) {
     skype: "",
     company: "",
     designation: "",
-    flag: "",
-    countryIso: DEFAULT_COUNTRY_ISO,
-    countryLabel: "Global",
   });
 
   const [editValues, setEditValues] = useState({ ...profile });
@@ -230,9 +224,6 @@ export function ProfilePage({ id }: { id?: string }) {
         skype: user.Skype || "",
         company: user.Company || "",
         designation: user.Designation || "",
-        flag: user.flag || "",
-        countryIso: normalizeCountryCode(user.flag) || DEFAULT_COUNTRY_ISO,
-        countryLabel: countryLabelFromFlag(user.flag),
       };
       setProfile(newProfile);
       setEditValues(newProfile);
@@ -242,6 +233,21 @@ export function ProfilePage({ id }: { id?: string }) {
 
   const hasPhoneNumber =
     Boolean(profile.phone) && profile.phone !== "No phone number";
+
+  const canDeriveCountryFromPhone =
+    hasPhoneNumber &&
+    (isOwnProfile
+      ? profile.otpVerified
+      : showProfileDetailSections && !isMobilePrivate);
+
+  const displayCountryIso = useMemo(
+    () => (canDeriveCountryFromPhone ? countryIsoFromPhone(profile.phone) : null),
+    [canDeriveCountryFromPhone, profile.phone]
+  );
+
+  const displayCountryLabel = displayCountryIso
+    ? countryLabelFromFlag(displayCountryIso)
+    : "Global";
 
   const displayPhoneNumber = (phone: string) => {
     if (!phone || phone === "No phone number") return "Not added";
@@ -306,10 +312,6 @@ export function ProfilePage({ id }: { id?: string }) {
       formData.append("Company", editValues.company);
       formData.append("Designation", editValues.designation);
 
-      if (editValues.countryIso) {
-        formData.append("flag", countryCodeToFlagEmoji(editValues.countryIso));
-      }
-
       if (selectedFile) {
         formData.append("ProfilePicture", selectedFile);
       }
@@ -330,16 +332,6 @@ export function ProfilePage({ id }: { id?: string }) {
         (err as { data?: { message?: string } })?.data?.message ||
           "Failed to update profile."
       );
-    }
-  };
-
-  const saveFlagForIso = async (iso: string): Promise<void> => {
-    if (!currentUserId || !iso) return;
-    const formData = new FormData();
-    formData.append("flag", countryCodeToFlagEmoji(iso));
-    const res = await updateProfile({ userId: String(currentUserId), data: formData }).unwrap();
-    if (res?.existingUser && viewerUser) {
-      dispatch(updateUser({ ...viewerUser, ...res.existingUser }));
     }
   };
 
@@ -462,35 +454,6 @@ export function ProfilePage({ id }: { id?: string }) {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Country</label>
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-10 w-11 shrink-0 items-center justify-center rounded-lg border border-[#E2E8F0] bg-white">
-                      <CountryFlag flag={editValues.countryIso} size={16} fallback="globe" />
-                    </div>
-                    <select
-                      value={editValues.countryIso}
-                      onChange={(e) => {
-                        const iso = e.target.value;
-                        setEditValues({
-                          ...editValues,
-                          countryIso: iso,
-                          countryLabel: countryLabelFromFlag(iso),
-                        });
-                      }}
-                      className="h-10 flex-1 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-3 text-sm text-[#1A1A1A] focus:border-[#0A7EA4] focus:outline-none"
-                    >
-                      {countryOptionsForIso(editValues.countryIso).map((c) => (
-                        <option key={c.iso} value={c.iso}>
-                          {c.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <p className="mt-1.5 text-[11px] text-[#94A3B8]">
-                    Same as the mobile app — country is saved with your profile flag.
-                  </p>
-                </div>
-                <div className="col-span-2">
                   <label className="text-[11px] font-bold text-[#64748B] uppercase mb-1 block">Location</label>
                   <input 
                     type="text" 
@@ -545,8 +508,8 @@ export function ProfilePage({ id }: { id?: string }) {
                 </div>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-y-1 gap-x-4 mb-3">
                   <p className="text-[#64748B] text-sm flex items-center gap-1.5">
-                    <CountryFlag flag={profile.flag || profile.countryIso} size={14} fallback="globe" />
-                    <span>{profile.countryLabel}</span>
+                    <CountryFlag flag={displayCountryIso} size={14} fallback="globe" />
+                    <span>{displayCountryLabel}</span>
                   </p>
                   {profile.location && profile.location !== "Not specified" && (
                     <>
@@ -1018,7 +981,7 @@ export function ProfilePage({ id }: { id?: string }) {
       open={phoneModalOpen}
       onOpenChange={setPhoneModalOpen}
       appJwt={appJwt || ""}
-      defaultCountry={(profile.countryIso || DEFAULT_COUNTRY_ISO) as Country}
+      defaultCountry={(displayCountryIso || DEFAULT_COUNTRY_ISO) as Country}
       mode={isPhoneUpdate ? "update" : "add"}
       onVerified={(phoneE164) => {
         setProfile((prev) => ({

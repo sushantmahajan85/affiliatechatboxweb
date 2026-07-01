@@ -8,8 +8,8 @@ import {
 import { AlertCircle, ChevronRight, Mail } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { TermsAcceptancePanel } from "@/components/terms-acceptance-panel";
-import { hasAcceptedTerms } from "@/lib/terms-acceptance-preference";
+import { TermsAgreementCheckbox } from "@/components/terms-agreement-checkbox";
+import { hasAcceptedTerms, markTermsAccepted } from "@/lib/terms-acceptance-preference";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
 import { closeAuthModal, setAuthView } from "@/store/uiSlice";
@@ -43,17 +43,15 @@ export function AuthModal() {
   const { isAuthModalOpen, authView } = useAppSelector((state) => state.ui);
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState<string | null>(null);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [termsReady, setTermsReady] = useState(false);
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   useEffect(() => {
-    setTermsAccepted(hasAcceptedTerms());
-    setTermsReady(true);
+    setTermsAgreed(hasAcceptedTerms());
   }, []);
 
   useEffect(() => {
     if (isAuthModalOpen) {
-      setTermsAccepted(hasAcceptedTerms());
+      setTermsAgreed(hasAcceptedTerms());
     }
   }, [isAuthModalOpen]);
   
@@ -67,9 +65,17 @@ export function AuthModal() {
   const isLoading = isGoogleLoading || isLinkedinLoading || isVerifyLoading;
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
+  const ensureTermsAgreed = (): boolean => {
+    if (termsAgreed) return true;
+    setError("Please accept the Terms of Service and Privacy Policy to continue.");
+    return false;
+  };
+
   const handleGoogleLogin = useGoogleLogin({
     onSuccess: async (tokenResponse) => {
+      if (!ensureTermsAgreed()) return;
       try {
+        markTermsAccepted();
         setError(null);
         const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
           headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
@@ -103,7 +109,8 @@ export function AuthModal() {
   });
 
   const handleLinkedinLogin = () => {
-    // Calling the backend redirect endpoint directly is cleaner if the backend handles the full flow
+    if (!ensureTermsAgreed()) return;
+    markTermsAccepted();
     window.location.href = getLinkedInAuthUrl();
   };
 
@@ -136,21 +143,7 @@ export function AuthModal() {
       <DialogContent className="sm:max-w-[520px] p-0 overflow-hidden rounded-[32px] border-none shadow-2xl">
         <div className="bg-white p-8 md:p-10">
           <AnimatePresence mode="wait">
-            {termsReady && !termsAccepted && authView === "login" && (
-              <motion.div
-                key="terms"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-              >
-                <TermsAcceptancePanel
-                  compact
-                  onAccepted={() => setTermsAccepted(true)}
-                />
-              </motion.div>
-            )}
-
-            {termsReady && termsAccepted && authView === 'login' && (
+            {authView === 'login' && (
               <motion.div
                 key="login"
                 initial={{ opacity: 0, y: 20 }}
@@ -170,10 +163,16 @@ export function AuthModal() {
                   </div>
                 )}
 
+                <TermsAgreementCheckbox
+                  checked={termsAgreed}
+                  onCheckedChange={setTermsAgreed}
+                  id="auth-modal-terms"
+                />
+
                 <div className="space-y-3">
                   <button
                     onClick={() => handleGoogleLogin()}
-                    disabled={isLoading}
+                    disabled={isLoading || !termsAgreed}
                     className="w-full h-[56px] bg-white border-2 border-[#E2E8F0] rounded-[16px] flex items-center justify-center gap-4 text-[15px] font-black text-[#1A1A1A] hover:bg-[#F8FAFC] hover:border-[#0A7EA4] transition-all disabled:opacity-50"
                   >
                     <GoogleIcon />
@@ -182,7 +181,7 @@ export function AuthModal() {
 
                   <button
                     onClick={handleLinkedinLogin}
-                    disabled={isLoading}
+                    disabled={isLoading || !termsAgreed}
                     className="w-full h-[56px] bg-[#0A66C2] rounded-[16px] flex items-center justify-center gap-4 text-[15px] font-black text-white hover:bg-[#085aae] transition-all disabled:opacity-50 shadow-md"
                   >
                     <LinkedInIcon />

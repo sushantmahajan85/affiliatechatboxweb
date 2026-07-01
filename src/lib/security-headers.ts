@@ -1,6 +1,32 @@
 type HeaderEntry = { key: string; value: string };
 
-function buildCsp(includeUpgradeInsecureRequests: boolean): string {
+function buildCsp(isProduction: boolean): string {
+  const connectSrc = [
+    "'self'",
+    ...(isProduction
+      ? []
+      : [
+          "http://localhost:*",
+          "http://127.0.0.1:*",
+          "ws://localhost:*",
+          "ws://127.0.0.1:*",
+        ]),
+    "https://online-media-tools-server-vercel.vercel.app",
+    "https://online-media-tools-server-vercel.onrender.com",
+    "https://*.googleapis.com",
+    "https://*.firebaseio.com",
+    "https://*.firebase.googleapis.com",
+    "wss://*.firebaseio.com",
+    "https://accounts.google.com",
+    "https://www.googleapis.com",
+    "https://flagcdn.com",
+    "https://onlinemediadeals.s3.eu-north-1.amazonaws.com",
+    "https://lh3.googleusercontent.com",
+    "https://media.licdn.com",
+    "https://static.cloudflareinsights.com",
+    "https://assets.mixkit.co",
+  ];
+
   const directives = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -12,13 +38,13 @@ function buildCsp(includeUpgradeInsecureRequests: boolean): string {
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: blob: https:",
     "media-src 'self' https: blob:",
-    "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https://online-media-tools-server-vercel.vercel.app https://online-media-tools-server-vercel.onrender.com https://*.googleapis.com https://*.firebaseio.com https://*.firebase.googleapis.com wss://*.firebaseio.com https://accounts.google.com https://www.googleapis.com https://flagcdn.com https://onlinemediadeals.s3.eu-north-1.amazonaws.com https://lh3.googleusercontent.com https://media.licdn.com https://static.cloudflareinsights.com https://assets.mixkit.co",
+    `connect-src ${connectSrc.join(" ")}`,
     "frame-src 'self' https://accounts.google.com https://www.linkedin.com https://*.firebaseapp.com",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
   ];
 
-  if (includeUpgradeInsecureRequests) {
+  if (isProduction) {
     directives.push("upgrade-insecure-requests");
   }
 

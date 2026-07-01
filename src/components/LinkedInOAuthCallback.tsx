@@ -6,6 +6,7 @@ import { useAppDispatch } from "@/store/hooks";
 import { setCredentials } from "@/store/authSlice";
 import { openWalkthroughForNewUser } from "@/lib/walkthrough-preference";
 import { getApiBaseUrl } from "@/lib/api-base-url";
+import { hasAcceptedTerms } from "@/lib/terms-acceptance-preference";
 
 const LINKEDIN_CALLBACK_PATH = "/auth/linkedin/callback";
 
@@ -49,6 +50,11 @@ export function LinkedInOAuthCallback({
 
     if (linkedinError) {
       router.replace(redirectTo);
+      return;
+    }
+
+    if (!hasAcceptedTerms()) {
+      router.replace("/login");
       return;
     }
 

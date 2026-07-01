@@ -11,6 +11,15 @@ const FORMAT_HINTS: Partial<Record<Country, string>> = {
   SA: "9 digits starting with 5",
 };
 
+export function countryIsoFromPhone(phone?: string | null): Country | null {
+  if (!phone || phone === "No phone number") return null;
+
+  const e164 = phone.startsWith("+") ? phone : `+${phone.replace(/\D/g, "")}`;
+  if (!e164 || e164 === "+") return null;
+
+  return parsePhoneNumber(e164)?.country ?? null;
+}
+
 export function getPhoneFormatHint(country?: Country): string | null {
   if (!country) return null;
   return FORMAT_HINTS[country] ?? null;

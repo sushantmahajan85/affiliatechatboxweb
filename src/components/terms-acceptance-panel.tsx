@@ -127,6 +127,15 @@ export function TermsAcceptancePanel({
             onClick={(e) => e.stopPropagation()}
           >
             Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link
+            href="/privacy-policy"
+            target="_blank"
+            className="text-[#0A7EA4] font-semibold hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Privacy Policy
           </Link>
         </span>
       </label>
