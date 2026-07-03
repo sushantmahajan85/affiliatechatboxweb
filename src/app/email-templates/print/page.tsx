@@ -9,7 +9,8 @@ const templates = [
   {
     id: "new_message",
     label: "New Message",
-    trigger: "POST /api/chat/send — fires on every message if receiver has email notifications on.",
+    status: "active",
+    trigger: "POST /api/chat/send — ACTIVE. Fires on a 1:1 message when receiver is eligible. Skipped for web-source messages (source=web / skipSmtpEmail) and when isEmailNotifAllowed=false.",
     subject: "New message from {senderName}",
     recipient: "Message receiver",
     html: `
@@ -37,7 +38,8 @@ const templates = [
   {
     id: "chat_request",
     label: "Chat Request",
-    trigger: "GET /api/email/chatRequestEmail/:id/:senderName — legacy route triggered when someone initiates first contact.",
+    status: "disabled",
+    trigger: "GET /api/email/chatRequestEmail/:id/:senderName — DISABLED. Route returns HTTP 410; server SMTP for chat-request is deprecated (handled client-side by mobile EmailJS).",
     subject: "Request to chat",
     recipient: "User being contacted",
     html: `
@@ -61,7 +63,8 @@ const templates = [
   {
     id: "new_post_users",
     label: "New Post — All Users",
-    trigger: "POST /api/email/newPostEmail — called by admin approve flow to notify all verified users.",
+    status: "disabled",
+    trigger: "POST /api/email/newPostEmail — DISABLED. Route returns HTTP 410; bulk broadcast is off (BULK_EMAIL_ENABLED = false).",
     subject: NEW_POST_EMAIL_SUBJECT,
     recipient: "All verified users with email notifications enabled",
     html: `
@@ -89,7 +92,8 @@ const templates = [
   {
     id: "new_partner_users",
     label: "New Partner — All Users",
-    trigger: "POST /api/users/addpartner — fires when admin adds a partner from the admin panel.",
+    status: "disabled",
+    trigger: "POST /api/users/addpartner — DISABLED. Broadcast email is off (BULK_EMAIL_ENABLED = false).",
     subject: "New Partner on Affiliate Chat Box",
     recipient: "All active users with email notifications enabled",
     html: `
@@ -120,7 +124,8 @@ const templates = [
   {
     id: "new_post_admin",
     label: "New Post Pending — Admin",
-    trigger: "POST /:userId/posts/add_post — fires immediately when any user submits a post, before admin review.",
+    status: "active",
+    trigger: "POST /api/posts/:userId/posts/add_post — ACTIVE. Fires server-side immediately when any user submits a post (NEW_POST_PENDING_ADMIN_EMAIL_ENABLED = true).",
     subject: "New post pending approval",
     recipient: "Admin (akidelhi@gmail.com)",
     html: `
@@ -148,7 +153,8 @@ const templates = [
   {
     id: "report_admin",
     label: "Post Reported — Admin",
-    trigger: "POST /api/email/newReportEmailToAdmin — called from Flutter app when a user reports a post or another user.",
+    status: "active",
+    trigger: "POST /api/users/reportuser — ACTIVE. Fires server-side when a user reports a post or user. (Also exposed via POST /api/email/newReportEmailToAdmin.)",
     subject: "New reported post",
     recipient: "Admin (akidelhi@gmail.com)",
     html: `
@@ -174,7 +180,8 @@ const templates = [
   {
     id: "test_email",
     label: "Test Email",
-    trigger: "POST /api/email/testEmail — manual test endpoint, sends to hardcoded address.",
+    status: "active",
+    trigger: "POST /api/email/testEmail — manual test endpoint (developer use only), sends to hardcoded address.",
     subject: "test email",
     recipient: "hastigabani1109@gmail.com (hardcoded)",
     html: `
@@ -226,6 +233,9 @@ const printStyles = `
   .var-tag { background: #e0f2fe; color: #0369a1; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 999px; font-family: monospace; }
   .preview-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; margin-bottom: 10px; }
   .preview-box { border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #f3f4f6; padding: 20px; }
+  .status-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 10px; border-radius: 999px; }
+  .status-active { background: #dcfce7; color: #15803d; }
+  .status-disabled { background: #e5e7eb; color: #6b7280; }
 `;
 
 export default function EmailTemplatesPrintPage() {
@@ -292,7 +302,12 @@ export default function EmailTemplatesPrintPage() {
           <div className="toc-item" key={t.id}>
             <div className="toc-num">{i + 1}</div>
             <div>
-              <div className="toc-label">{t.label}</div>
+              <div className="toc-label">
+                {t.label}{" "}
+                <span className={`status-badge ${t.status === "active" ? "status-active" : "status-disabled"}`}>
+                  {t.status === "active" ? "Sending" : "Disabled"}
+                </span>
+              </div>
               <div className="toc-sub">Subject: {t.subject}</div>
               <div className="toc-sub">→ {t.recipient}</div>
             </div>
@@ -306,6 +321,9 @@ export default function EmailTemplatesPrintPage() {
           <div className="section-header">
             <div className="section-num">{i + 1}</div>
             <div className="section-title">{t.label}</div>
+            <span className={`status-badge ${t.status === "active" ? "status-active" : "status-disabled"}`}>
+              {t.status === "active" ? "Sending" : "Disabled"}
+            </span>
           </div>
 
           <div className="meta-grid">
