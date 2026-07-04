@@ -228,6 +228,9 @@ function ChatWindow({
   const [markAsRead] = useMarkChatAsReadMutation();
 
   const { isSenderPending, isRecipientPending } = useMemo(() => {
+    if (isAdminSupportChatPartner(String(chat.id))) {
+      return { isSenderPending: false, isRecipientPending: false };
+    }
     if (useFb && fbChat.active) {
       return {
         isSenderPending: fbChat.isSenderPending,
@@ -296,7 +299,7 @@ function ChatWindow({
     currentUser?.isLinkedinVerified,
     partnerUser?.isLinkedinVerified,
     isAdminChatUser,
-    partnerUser?.role === "admin"
+    partnerUser?.role === "admin" || isAdminSupportChatPartner(String(chat.id))
   );
   const canSendInChat =
     !accountStatus.accountDisabled && !chatBlockedReason && !isSenderPending;

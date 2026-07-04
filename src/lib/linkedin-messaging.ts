@@ -15,8 +15,8 @@ export function getLinkedinChatBlockReason(
   recipientIsAdmin?: boolean
 ): LinkedinChatBlockReason | null {
   if (senderIsAdmin) return null;
-  if (!senderLinkedinVerified) return "sender_not_verified";
   if (recipientIsAdmin) return null;
+  if (!senderLinkedinVerified) return "sender_not_verified";
   if (recipientLinkedinVerified !== true) return "recipient_not_verified";
   return null;
 }

@@ -350,6 +350,9 @@ export function ChatsPage() {
 
   // Request gate: Firestore matches Android chat doc; otherwise Mongo notifications + history
   const { isSenderPending, isRecipientPending } = useMemo(() => {
+    if (selectedChatId && isAdminSupportChatPartner(String(selectedChatId))) {
+      return { isSenderPending: false, isRecipientPending: false };
+    }
     if (useFirestore && fbChat.active) {
       return {
         isSenderPending: fbChat.isSenderPending,
@@ -596,7 +599,9 @@ export function ChatsPage() {
     }
 
     const partnerUser = partnerLinkedinGuard?.user;
-    const recipientIsAdmin = partnerUser?.role === "admin";
+    const recipientIsAdmin =
+      partnerUser?.role === "admin" ||
+      isAdminSupportChatPartner(String(selectedChatId));
     const blockReason = getLinkedinChatBlockReason(
       authUser?.isLinkedinVerified,
       partnerUser?.isLinkedinVerified,
@@ -725,25 +730,6 @@ export function ChatsPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentMessages, selectedChatId]);
-
-  if (authUser && !authUser.isLinkedinVerified && !isAdminChatUser) {
-    return (
-      <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-8 max-w-lg mx-auto border border-[#F3F4F6]">
-        <h1 className="text-[20px] font-bold text-[#1A1A2E] mb-2">Chats</h1>
-        <p className="text-[#64748b] text-[14px] mb-6">
-          Messaging is only available between LinkedIn-verified members. Complete LinkedIn verification on your profile
-          to use chat.
-        </p>
-        <button
-          type="button"
-          onClick={() => router.push("/profile")}
-          className="px-6 py-2.5 bg-[#0A7EA4] text-white rounded-xl text-sm font-bold hover:bg-[#086a8a] transition-colors"
-        >
-          Go to profile
-        </button>
-      </div>
-    );
-  }
 
   return (
     <>

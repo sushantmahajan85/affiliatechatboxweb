@@ -6,6 +6,7 @@ import type { FirestoreChatRoomRow } from "@/lib/firebase-chat";
 import {
   acceptFirestoreChatRequest,
   buildChatRoomId,
+  isAdminSupportChatPartner,
   onChatOpenSideEffects,
   sendFirestoreChatMessage,
   subscribeChatMessages,
@@ -79,15 +80,17 @@ export function useFirebaseChatModule(
   const senderId = String(roomMeta?.senderId ?? "");
   const receiverId = String(roomMeta?.receiverId ?? "");
 
+  const isAdminPartnerChat = isAdminSupportChatPartner(partnerStr);
+
   const isRecipientPending = useMemo(() => {
-    if (!currentUserId) return false;
+    if (!currentUserId || isAdminPartnerChat) return false;
     return isRequested === "pending" && currentUserId === receiverId;
-  }, [currentUserId, isRequested, receiverId]);
+  }, [currentUserId, isAdminPartnerChat, isRequested, receiverId]);
 
   const isSenderPending = useMemo(() => {
-    if (!currentUserId) return false;
+    if (!currentUserId || isAdminPartnerChat) return false;
     return isRequested === "pending" && currentUserId === senderId && messages.length >= 1;
-  }, [currentUserId, isRequested, senderId, messages.length]);
+  }, [currentUserId, isAdminPartnerChat, isRequested, senderId, messages.length]);
 
   const sendFirestoreText = useMemo(() => {
     return async (receiverId: string, text: string) => {
