@@ -55,8 +55,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "chat_request",
     label: "Chat Request",
-    status: "disabled",
-    trigger: "GET /api/email/chatRequestEmail/:id/:senderName — DISABLED. Route returns HTTP 410; server SMTP for chat-request is deprecated (handled client-side by mobile EmailJS).",
+    status: "active",
+    trigger: "First contact between two users — POST /api/chat/send, POST /api/chat/firestore-push (isChatRequest=true), GET /api/email/chatRequestEmail/:id/:senderName. Skipped for admin support threads and when isEmailNotifAllowed=false.",
     recipient: "The user being contacted",
     subject: "Request to chat",
     vars: [
@@ -64,19 +64,21 @@ const emailTemplates: EmailTemplate[] = [
       { key: "senderName", label: "Sender Name", default: "John Doe" },
     ],
     html: (v) => `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-        <div style="background-color:#f4f4f4;padding:20px;">
-          <h2 style="color:#333;">Chat Request Notification</h2>
-          <p style="color:#555;">Hello ${v.userName},</p>
-          <p style="color:#555;">You have received a chat request from ${v.senderName}.</p>
-          <p style="color:#555;">To accept the chat request, please login to Affiliate Chat Box</p>
-          <p style="color:#555;">Thank you!</p>
-          <br>
-          <p style="color:#888;">This email was sent automatically. Please do not reply to this email.</p>
-          ${affiliatePromoSectionHtml()}
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb;text-align:center;">
-            ${emailPreferencesFooterHtml({ automated: true })}
+      <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:600px;margin:0 auto;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.05);">
+        <div style="background-color:#0A7EA4;padding:24px;text-align:center;">
+          <h1 style="color:#ffffff;margin:0;font-size:24px;">New Chat Request!</h1>
+        </div>
+        <div style="padding:32px;background-color:#ffffff;">
+          <p style="font-size:16px;color:#333333;line-height:1.6;">Hello <strong>${v.userName || "there"}</strong>,</p>
+          <p style="font-size:16px;color:#333333;line-height:1.6;">You have received a chat request from <strong>${v.senderName}</strong> on Affiliate Chat Box.</p>
+          <p style="font-size:15px;color:#64748b;margin:20px 0 0;">Accept the request to start messaging.</p>
+          <div style="text-align:center;margin-top:32px;">
+            <a href="https://affiliatechatbox.com/chats" style="background-color:#0A7EA4;color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:16px;display:inline-block;">View Request</a>
           </div>
+          ${affiliatePromoSectionHtml()}
+        </div>
+        <div style="background-color:#fcfcfc;padding:20px;text-align:center;border-top:1px solid #f0f0f0;">
+          ${emailPreferencesFooterHtml({ automated: true })}
         </div>
       </div>`,
   },

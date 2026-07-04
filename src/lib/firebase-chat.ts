@@ -201,6 +201,7 @@ export async function sendFirestoreChatMessage(
   const safeMessage = assertSafeChatMessage(message);
   const chatRoomId = buildChatRoomId(currentUserId, receiverId);
   const chatRef = doc(db, "chats", chatRoomId);
+  let isChatRequest = false;
 
   await runTransaction(db, async (txn) => {
     const snap = await txn.get(chatRef);
@@ -218,6 +219,7 @@ export async function sendFirestoreChatMessage(
     txn.set(newMsgRef, msg);
 
     if (!snap.exists()) {
+      isChatRequest = true;
       txn.set(chatRef, {
         users: [currentUserId, receiverId].sort(),
         senderId: currentUserId,
@@ -251,6 +253,7 @@ export async function sendFirestoreChatMessage(
     message: safeMessage,
     messageType,
     jwt: authToken,
+    isChatRequest,
   });
 
   return chatRoomId;

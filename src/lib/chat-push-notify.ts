@@ -1,8 +1,7 @@
 import { getApiBaseUrl } from "@/lib/api-base-url";
 
 /**
- * Web chat notifications: FCM + in-app only.
- * Do not request SMTP email here — it duplicated legacy EmailJS/mobile sends and overloaded the server.
+ * Web chat notifications: FCM + in-app; chat-request emails when isChatRequest is true.
  */
 export async function notifyFirestoreChatPush(params: {
   senderId: string;
@@ -10,6 +9,7 @@ export async function notifyFirestoreChatPush(params: {
   message: string;
   messageType?: "text" | "image" | "audio";
   jwt?: string;
+  isChatRequest?: boolean;
 }): Promise<void> {
   if (!params.jwt || !params.senderId || !params.receiverId) return;
 
@@ -26,9 +26,9 @@ export async function notifyFirestoreChatPush(params: {
         receiverId: params.receiverId,
         message: params.message,
         messageType: params.messageType ?? "text",
-        /** Web client: never send duplicate SMTP emails (push/in-app only). */
         skipSmtpEmail: true,
         source: "web",
+        isChatRequest: params.isChatRequest === true,
       }),
     });
     if (!res.ok) {
