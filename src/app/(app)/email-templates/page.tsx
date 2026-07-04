@@ -5,9 +5,12 @@ import { appendEmailDisclaimer, affiliatePromoSectionHtml, emailPreferencesFoote
 
 // ─── Email Templates ─────────────────────────────────────────────────────────
 
+type EmailStatus = "active" | "disabled";
+
 type EmailTemplate = {
   id: string;
   label: string;
+  status: EmailStatus;
   trigger: string;
   recipient: string;
   subject: string;
@@ -19,7 +22,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "new_message",
     label: "New Message",
-    trigger: "POST /api/chat/send — fires on every message if receiver has email notifications enabled",
+    status: "active",
+    trigger: "POST /api/chat/send — fires on a 1:1 message when receiver is eligible. Skipped for web-source messages (source=web / skipSmtpEmail) and when isEmailNotifAllowed=false.",
     recipient: "Message receiver",
     subject: "New message from {senderName}",
     vars: [
@@ -51,7 +55,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "chat_request",
     label: "Chat Request",
-    trigger: "GET /api/email/chatRequestEmail/:id/:senderName — legacy route for first-ever contact",
+    status: "disabled",
+    trigger: "GET /api/email/chatRequestEmail/:id/:senderName — DISABLED. Route returns HTTP 410; server SMTP for chat-request is deprecated (handled client-side by mobile EmailJS).",
     recipient: "The user being contacted",
     subject: "Request to chat",
     vars: [
@@ -78,7 +83,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "new_post_users",
     label: "New Post — All Users",
-    trigger: "POST /api/email/newPostEmail — called by admin approve flow to notify all verified users",
+    status: "disabled",
+    trigger: "POST /api/email/newPostEmail — DISABLED. Route returns HTTP 410; bulk broadcast is off (BULK_EMAIL_ENABLED = false).",
     recipient: "All users with email notifications enabled",
     subject: NEW_POST_EMAIL_SUBJECT,
     vars: [
@@ -110,7 +116,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "new_partner_users",
     label: "New Partner — All Users",
-    trigger: "POST /api/users/addpartner — fires when admin adds a partner from the admin panel",
+    status: "disabled",
+    trigger: "POST /api/users/addpartner — DISABLED. Broadcast email is off (BULK_EMAIL_ENABLED = false).",
     recipient: "All active users with email notifications enabled",
     subject: "New Partner on Affiliate Chat Box",
     vars: [
@@ -145,7 +152,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "new_post_admin",
     label: "New Post Pending — Admin",
-    trigger: "POST /:userId/posts/add_post — fires immediately when any user submits a post",
+    status: "active",
+    trigger: "POST /api/posts/:userId/posts/add_post — ACTIVE. Fires server-side immediately when any user submits a post (NEW_POST_PENDING_ADMIN_EMAIL_ENABLED = true).",
     recipient: "Admin (akidelhi@gmail.com)",
     subject: "New post pending approval",
     vars: [
@@ -176,7 +184,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "report_admin",
     label: "Post Reported — Admin",
-    trigger: "POST /api/email/newReportEmailToAdmin — called from Flutter when a user reports a post or user",
+    status: "active",
+    trigger: "POST /api/users/reportuser — ACTIVE. Fires server-side when a user reports a post or user. (Also exposed via POST /api/email/newReportEmailToAdmin.)",
     recipient: "Admin (akidelhi@gmail.com)",
     subject: "New reported post",
     vars: [
@@ -207,7 +216,8 @@ const emailTemplates: EmailTemplate[] = [
   {
     id: "test_email",
     label: "Test Email",
-    trigger: "POST /api/email/testEmail — manual test endpoint",
+    status: "active",
+    trigger: "POST /api/email/testEmail — manual test endpoint (developer use only).",
     recipient: "hastigabani1109@gmail.com (hardcoded)",
     subject: "test email",
     vars: [],
@@ -510,7 +520,20 @@ export default function EmailTemplatesPage() {
                     activeEmailId === t.id ? "bg-[#0A7EA4] text-white" : "text-gray-700 hover:bg-gray-100"
                   }`}
                 >
-                  <span className="block text-sm font-medium">{t.label}</span>
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="block text-sm font-medium">{t.label}</span>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+                        activeEmailId === t.id
+                          ? "bg-white/25 text-white"
+                          : t.status === "active"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-200 text-gray-500"
+                      }`}
+                    >
+                      {t.status === "active" ? "On" : "Off"}
+                    </span>
+                  </span>
                   <span className={`mt-0.5 block truncate text-xs ${activeEmailId === t.id ? "text-blue-100" : "text-gray-400"}`}>
                     {t.recipient}
                   </span>
@@ -521,6 +544,22 @@ export default function EmailTemplatesPage() {
 
           {/* Controls */}
           <div className="w-72 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4">
+            <div
+              className={`mb-3 flex items-center gap-2 rounded-lg px-3 py-2 ${
+                activeEmail.status === "active" ? "bg-green-50" : "bg-gray-100"
+              }`}
+            >
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wide ${
+                  activeEmail.status === "active" ? "bg-green-600 text-white" : "bg-gray-400 text-white"
+                }`}
+              >
+                {activeEmail.status === "active" ? "Sending" : "Disabled"}
+              </span>
+              <span className={`text-xs font-medium ${activeEmail.status === "active" ? "text-green-800" : "text-gray-500"}`}>
+                {activeEmail.status === "active" ? "This email is sent by the backend." : "Not sent — kept for reference."}
+              </span>
+            </div>
             <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Trigger</p>
               <p className="mt-1 text-xs text-blue-800">{activeEmail.trigger}</p>
