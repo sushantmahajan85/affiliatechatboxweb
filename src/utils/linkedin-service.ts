@@ -4,7 +4,8 @@ export const sharePostOnLinkedIn = async (
   postContent: string,
   accessToken: string,
   linkedinID: string,
-  postId?: string
+  postId?: string,
+  postDescription?: string
 ) => {
   if (!linkedinID || !accessToken) {
     return {
@@ -22,6 +23,9 @@ export const sharePostOnLinkedIn = async (
   };
   if (postId) {
     body.postId = postId;
+  }
+  if (postDescription?.trim()) {
+    body.postDescription = postDescription.trim();
   }
 
   try {

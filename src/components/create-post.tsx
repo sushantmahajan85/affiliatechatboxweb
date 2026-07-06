@@ -164,7 +164,8 @@ export function CreatePost() {
             content,
             user.linkedInAccessToken,
             user.linkedInId,
-            newPostId
+            newPostId,
+            tagLine
           );
           if (linkedinResult.success) {
             toast.success("Also shared to your LinkedIn profile!");

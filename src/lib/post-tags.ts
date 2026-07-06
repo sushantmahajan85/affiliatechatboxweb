@@ -39,6 +39,17 @@ export function formatTagsForPostDescription(tags: string[]): string {
   return tags.map((t) => `#${normalizePostTag(t)}`).join(" ");
 }
 
+export function appendTagsToPostContent(
+  postContent?: string | null,
+  postDescription?: string | null
+): string {
+  const content = String(postContent || "").trim();
+  const tags = String(postDescription || "").trim();
+  if (!tags) return content;
+  if (!content) return tags;
+  return `${content}\n\n${tags}`;
+}
+
 export const STATIC_POST_TAGS = [
   "Affiliate Marketing",
   "CPA",

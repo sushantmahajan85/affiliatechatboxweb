@@ -1,5 +1,6 @@
-/** Plain-text template for LinkedIn post shares — must match backend `linkedinPostTemplate.js`. */
+/** Plain-text template for LinkedIn post shares — must match backend `emailPromoContent.js`. */
 
+import { appendTagsToPostContent } from "./post-tags";
 import { getSiteUrl } from "./site-url";
 
 const LINKEDIN_COMPANY_POSTS_URL =
@@ -11,8 +12,11 @@ const IPHONE_APP_URL =
   "https://apps.apple.com/app/affiliate-chat-box/id6477887051";
 export const LINKEDIN_POST_TITLE = "New posting update on Affiliatechatbox.com";
 
-export function buildLinkedInPostShareText(postContent: string): string {
-  const body = String(postContent || "").trim();
+export function buildLinkedInPostShareText(
+  postContent: string,
+  postDescription?: string | null
+): string {
+  const body = appendTagsToPostContent(postContent, postDescription);
   return `${LINKEDIN_POST_TITLE}
 
 ${body}
