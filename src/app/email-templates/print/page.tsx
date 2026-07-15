@@ -201,6 +201,62 @@ const templates = [
       </div>`,
     variables: ["none — static content"],
   },
+  {
+    id: "post_approved_author",
+    label: "Post Approved — Author",
+    status: "disabled",
+    trigger: "POST /api/posts/:postId/Approve_post (appproveStatus=true) — gated by USER_BROADCAST_EMAIL_ENABLED. Push still links to /post/{postId}.",
+    subject: "Your post has been approved",
+    recipient: "Post author",
+    html: `
+      <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;">
+        <div style="background-color:#0A7EA4;padding:24px;text-align:center;">
+          <h1 style="color:#fff;margin:0;font-size:22px;">Post Approved</h1>
+        </div>
+        <div style="padding:32px;background:#fff;">
+          <p style="font-size:16px;color:#333;">Hello <strong>Sarah</strong>,</p>
+          <p style="font-size:15px;color:#555;">Your post has been approved by admin and is now live on Affiliate Chat Box.</p>
+          <div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #0A7EA4;border-radius:4px;">
+            <p style="margin:0;color:#4a5568;">Looking for affiliate partners in health & wellness niche!</p>
+          </div>
+          <div style="text-align:center;margin-top:28px;">
+            <a href="https://affiliatechatbox.com/post/65f1a2b3c4d5e6f7a8b9c0d1" style="background-color:#0A7EA4;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;">View Your Post</a>
+          </div>
+          ${affiliatePromoSectionHtml()}
+        </div>
+        <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
+          ${emailPreferencesFooterHtml()}
+        </div>
+      </div>`,
+    variables: ["ownerFirstName", "postContent", "postId"],
+  },
+  {
+    id: "post_disapproved_author",
+    label: "Post Disapproved — Author",
+    status: "disabled",
+    trigger: "POST /api/posts/:postId/Approve_post (appproveStatus=false) — no public post link by design so rejected posts cannot be opened from email.",
+    subject: "Your post was disapproved",
+    recipient: "Post author",
+    html: `
+      <div style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e0e0e0;border-radius:12px;overflow:hidden;">
+        <div style="background-color:#B91C1C;padding:24px;text-align:center;">
+          <h1 style="color:#fff;margin:0;font-size:22px;">Post Disapproved</h1>
+        </div>
+        <div style="padding:32px;background:#fff;">
+          <p style="font-size:16px;color:#333;">Hello <strong>Sarah</strong>,</p>
+          <p style="font-size:15px;color:#555;">Your recent post was not approved by admin.</p>
+          <div style="margin:20px 0;padding:16px;background:#f8fafc;border-left:4px solid #B91C1C;border-radius:4px;">
+            <p style="margin:0;color:#4a5568;">Looking for affiliate partners in health & wellness niche!</p>
+          </div>
+          <p style="font-size:14px;color:#64748b;margin:0;">Please review platform guidelines and submit again if needed.</p>
+          ${affiliatePromoSectionHtml()}
+        </div>
+        <div style="background:#fcfcfc;padding:16px;text-align:center;border-top:1px solid #f0f0f0;">
+          ${emailPreferencesFooterHtml()}
+        </div>
+      </div>`,
+    variables: ["ownerFirstName", "postContent"],
+  },
 ];
 
 const printStyles = `

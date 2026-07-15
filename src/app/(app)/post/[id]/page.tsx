@@ -12,12 +12,26 @@ async function fetchPostForMeta(postId: string) {
     next: { revalidate: 300 },
   });
   if (!res.ok) return null;
-  return res.json() as Promise<{ postContent?: string; userName?: string }>;
+  const data = (await res.json()) as {
+    post?: { postContent?: string; userName?: string; isApproved?: boolean };
+    postContent?: string;
+    userName?: string;
+  };
+  const post = data.post || data;
+  if (!post || (data.post && data.post.isApproved === false)) return null;
+  return post;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
   const post = await fetchPostForMeta(id);
+  if (!post) {
+    return {
+      title: "Post unavailable",
+      description: "This post is not available on Affiliate Chat Box.",
+      robots: { index: false, follow: false },
+    };
+  }
   const description = String(post?.postContent || "View this post on Affiliate Chat Box.").slice(0, 200);
   const url = `${getSiteUrl()}/post/${encodeURIComponent(id)}`;
   const image = `${url}/opengraph-image`;

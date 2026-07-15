@@ -50,7 +50,7 @@ import {
 } from "@/components/report-post-dialog";
 import { SharePostDialog } from "@/components/share-post-dialog";
 import { canBumpPost, formatPostAge } from "@/lib/post-bump";
-import { getPostApprovalBadge } from "@/lib/post-approval-status";
+import { getPostApprovalBadge, getPostApprovalStatus } from "@/lib/post-approval-status";
 
 interface PostFeedProps {
   activeTab: string;
@@ -119,8 +119,17 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     postContent: string;
   } | null>(null);
 
-  const openShareDialogForPost = (post: { _id: string; postContent?: string }) => {
+  const openShareDialogForPost = (post: {
+    _id: string;
+    postContent?: string;
+    underApproval?: boolean;
+    isApproved?: boolean;
+  }) => {
     blockCardNavigationRef.current = true;
+    if (getPostApprovalStatus(post) !== "approved") {
+      toast.info("Only approved posts can be shared");
+      return;
+    }
     setShareTarget({
       _id: String(post._id),
       postContent: post.postContent || "",
@@ -205,9 +214,17 @@ export function PostFeed({ activeTab }: PostFeedProps) {
     }
   };
 
-  const handleCardClick = (postId: string) => {
+  const handleCardClick = (postId: string, post?: { underApproval?: boolean; isApproved?: boolean }) => {
     if (blockCardNavigationRef.current) {
       blockCardNavigationRef.current = false;
+      return;
+    }
+    if (post && getPostApprovalStatus(post) !== "approved") {
+      toast.info(
+        getPostApprovalStatus(post) === "pending"
+          ? "This post is still pending approval"
+          : "This post was disapproved and is not publicly available"
+      );
       return;
     }
     router.push(`/post/${postId}`);
@@ -407,7 +424,7 @@ export function PostFeed({ activeTab }: PostFeedProps) {
           return (
             <div 
               key={post._id} 
-              onClick={() => handleCardClick(post._id)}
+              onClick={() => handleCardClick(post._id, post)}
               className="bg-white rounded-[14px] p-4.5 shadow-[0_2px_8px_rgba(0,0,0,0.06)] flex flex-col h-full cursor-pointer hover:shadow-[0_4px_12px_rgba(0,0,0,0.1)] transition-all border border-transparent hover:border-[#E0E0E0] relative"
             >
               <div className="flex items-start justify-between gap-3 mb-4">
@@ -569,7 +586,8 @@ export function PostFeed({ activeTab }: PostFeedProps) {
                     e.stopPropagation();
                     openShareDialogForPost(post);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 h-9 border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[12px] font-medium hover:bg-[#F5F5F5] transition-colors"
+                  disabled={getPostApprovalStatus(post) !== "approved"}
+                  className="flex-1 flex items-center justify-center gap-2 h-9 border border-[#E0E0E0] rounded-lg text-[#3C3C3C] text-[12px] font-medium hover:bg-[#F5F5F5] transition-colors disabled:opacity-40 disabled:pointer-events-none"
                 >
                   <Share2 className="w-4 h-4 text-[#6B7280]" />
                   <span>Share Post</span>

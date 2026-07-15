@@ -21,7 +21,12 @@ export default async function Image({ params }: OgProps) {
       next: { revalidate: 300 },
     });
     if (res.ok) {
-      const post = (await res.json()) as { postContent?: string; userName?: string };
+      const data = (await res.json()) as {
+        post?: { postContent?: string; userName?: string };
+        postContent?: string;
+        userName?: string;
+      };
+      const post = data.post || data;
       const content = String(post.postContent || "").trim();
       if (content) excerpt = content.length > 220 ? `${content.slice(0, 219)}…` : content;
       if (post.userName) author = post.userName;

@@ -192,7 +192,9 @@ export function PostDetailsPage() {
     return (
       <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-12 text-center">
         <h2 className="text-[20px] font-bold text-red-600 mb-2">Post not found</h2>
-        <p className="text-[#757575] mb-6">The post you are looking for might have been deleted or moved.</p>
+        <p className="text-[#757575] mb-6">
+          This post is unavailable. It may have been removed, rejected, or is still pending approval.
+        </p>
         <button 
           onClick={() => router.push("/")}
           className="px-6 py-2 bg-[#0A7EA4] text-white rounded-lg font-medium hover:bg-[#086a8a] transition-colors"
@@ -204,6 +206,23 @@ export function PostDetailsPage() {
   }
 
   const post = data.post;
+  // Defense in depth: never render non-approved posts from a public detail link.
+  if (post.underApproval || post.isApproved !== true) {
+    return (
+      <div className="bg-white rounded-[14px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] p-12 text-center">
+        <h2 className="text-[20px] font-bold text-red-600 mb-2">Post not found</h2>
+        <p className="text-[#757575] mb-6">
+          This post is unavailable. It may have been removed, rejected, or is still pending approval.
+        </p>
+        <button 
+          onClick={() => router.push("/")}
+          className="px-6 py-2 bg-[#0A7EA4] text-white rounded-lg font-medium hover:bg-[#086a8a] transition-colors"
+        >
+          Go back home
+        </button>
+      </div>
+    );
+  }
   const currentUserId = currentUser?._id;
   const isOwner =
     !!currentUserId && String(currentUserId) === String(post.userId);
