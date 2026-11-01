@@ -35,6 +35,7 @@ export const authApi = api.injectEndpoints({
       any,
       {
         id: string;
+        googleAccessToken: string;
         email: string;
         firstName: string;
         lastName: string;

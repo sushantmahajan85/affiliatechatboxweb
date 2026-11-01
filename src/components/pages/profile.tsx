@@ -146,6 +146,7 @@ export function ProfilePage({ id }: { id?: string }) {
         const digits = String(viewerUser?.mobileNumber || "").replace(/\D/g, "");
         const response = await googleVerifyMutate({
           id: String(currentUserId),
+          googleAccessToken: tokenResponse.access_token,
           email: userInfo.email,
           firstName: userInfo.given_name,
           lastName: userInfo.family_name || " ",

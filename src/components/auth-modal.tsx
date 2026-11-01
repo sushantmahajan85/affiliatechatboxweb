@@ -83,6 +83,7 @@ export function AuthModal() {
         const userInfo = await userInfoRes.json();
         
         const payload = {
+          googleAccessToken: tokenResponse.access_token,
           email: userInfo.email,
           firstName: userInfo.given_name,
           lastName: userInfo.family_name || " ",
