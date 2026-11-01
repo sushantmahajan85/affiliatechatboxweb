@@ -10,6 +10,7 @@ import { ImageWithFallback } from "@/components/figma/ImageWithFallback";
 import { clsx } from "clsx";
 import { motion } from "motion/react";
 import { getFirestoreDb, getFirebaseStorage, isFirebaseConfigured } from "@/lib/firebase-app";
+import { useChatBackendIsFirebase } from "@/context/FirebaseChatRoomsProvider";
 import {
   buildChatRoomId,
   FIRESTORE_ADMIN_SUPPORT_USER_ID,
@@ -62,7 +63,10 @@ export function AdminPage() {
 
   const chatRoomId =
     currentUserId != null ? buildChatRoomId(currentUserId, adminId) : null;
-  const firebaseReady = isFirebaseConfigured() && Boolean(currentUserId) && Boolean(chatRoomId);
+  // Wait for the Firebase chat session (signed in as this user) before subscribing; rules deny otherwise.
+  const chatSessionActive = useChatBackendIsFirebase();
+  const firebaseReady =
+    chatSessionActive && isFirebaseConfigured() && Boolean(currentUserId) && Boolean(chatRoomId);
 
   useEffect(() => {
     if (!firebaseReady || !chatRoomId || !currentUserId) {

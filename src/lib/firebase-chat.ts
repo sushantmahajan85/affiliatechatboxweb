@@ -21,6 +21,13 @@ import {
 } from "firebase/firestore";
 import type { FirebaseStorage } from "firebase/storage";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { ensureFirebaseChatSession } from "@/lib/firebase-session";
+
+/** Rules require Firebase Auth as the chat user; (re)establish it before any write. */
+async function requireChatSession(): Promise<void> {
+  const ok = await ensureFirebaseChatSession();
+  if (!ok) throw new Error("Chat is not ready. Please sign in again.");
+}
 
 /** Same admin user id as Flutter `contact_admin.dart` / `posts.dart`. */
 export const FIRESTORE_ADMIN_SUPPORT_USER_ID = "658c582ff1bc8978d2300823";
@@ -199,6 +206,7 @@ export async function sendFirestoreChatMessage(
 ): Promise<string> {
   const { currentUserId, receiverId, message, messageType, imageUrl, audioUrl, authToken } = params;
   const safeMessage = assertSafeChatMessage(message);
+  await requireChatSession();
   const chatRoomId = buildChatRoomId(currentUserId, receiverId);
   const chatRef = doc(db, "chats", chatRoomId);
   let isChatRequest = false;
@@ -273,6 +281,7 @@ export async function sendFirestoreAdminMessage(
 ): Promise<string> {
   const { currentUserId, adminReceiverId, message, messageType, imageUrl, authToken } = params;
   const safeMessage = assertSafeChatMessage(message);
+  await requireChatSession();
   const chatRoomId = buildChatRoomId(currentUserId, adminReceiverId);
   const chatRef = doc(db, "chats", chatRoomId);
 
@@ -333,6 +342,7 @@ export async function uploadFirestoreChatImage(
   storage: FirebaseStorage,
   params: { userId: string; chatRoomId: string; data: Uint8Array; contentType: string }
 ): Promise<string> {
+  await requireChatSession();
   const fileName = `${params.userId}-${Date.now()}.jpg`;
   const storageRef = ref(storage, `chat_images/${params.chatRoomId}/${fileName}`);
   await uploadBytes(storageRef, params.data, { contentType: params.contentType });
@@ -340,6 +350,7 @@ export async function uploadFirestoreChatImage(
 }
 
 export async function acceptFirestoreChatRequest(db: Firestore, chatRoomId: string): Promise<void> {
+  await requireChatSession();
   await updateDoc(doc(db, "chats", chatRoomId), { isRequested: "accepted" });
 }
 
@@ -381,6 +392,7 @@ export async function onChatOpenSideEffects(
   chatRoomId: string,
   currentUserId: string
 ): Promise<void> {
+  if (!(await ensureFirebaseChatSession().catch(() => false))) return;
   await markDeliveredMessagesAsSeen(db, chatRoomId, currentUserId);
   await resetUnreadCount(db, chatRoomId, currentUserId);
 }
