@@ -1,5 +1,5 @@
 export const MAX_IMAGE_UPLOAD_BYTES = 300 * 1024;
-export const MAX_VIDEO_UPLOAD_BYTES = 1024 * 1024;
+export const MAX_VIDEO_UPLOAD_BYTES = 500 * 1024 * 1024;
 
 export function isVideoFile(file: Pick<File, "type">): boolean {
   return file.type.startsWith("video/");
@@ -36,7 +36,7 @@ export function validateMediaUpload(
 
   if (video) {
     if (file.size > MAX_VIDEO_UPLOAD_BYTES) {
-      return { ok: false, message: "Video is too large. Maximum size is 1MB." };
+      return { ok: false, message: "Video is too large. Maximum size is 500MB." };
     }
     return { ok: true };
   }

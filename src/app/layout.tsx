@@ -7,6 +7,11 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Affiliate Chat Box',
   description: 'Affiliate chat box application',
+  icons: {
+    icon: [{ url: '/assets/logo.png', type: 'image/png' }],
+    shortcut: '/assets/logo.png',
+    apple: '/assets/logo.png',
+  },
 };
 
 export default function RootLayout({
