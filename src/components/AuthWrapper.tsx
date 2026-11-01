@@ -48,7 +48,7 @@ export function AuthWrapper({ children }: { children: React.ReactNode }) {
       };
 
       socket.connect();
-      socket.emit("user_connected", userId);
+      socket.emit("user_connected", { token });
       socket.on("account_blocked", onAccountBlocked);
 
       return () => {
