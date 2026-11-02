@@ -13,7 +13,7 @@ export async function notifyFirestoreChatPush(params: {
 }): Promise<void> {
   if (!params.jwt || !params.senderId || !params.receiverId) return;
 
-  const base = getApiBaseUrl("http://localhost:8000");
+  const base = getApiBaseUrl();
   try {
     const res = await fetch(`${base}/api/chat/firestore-push`, {
       method: "POST",

@@ -16,7 +16,6 @@ export default function robots(): MetadataRoute.Robots {
         "/login",
         "/auth",
         "/profile",
-        "/email-templates",
       ],
     },
     sitemap: `${siteUrl}/sitemap.xml`,

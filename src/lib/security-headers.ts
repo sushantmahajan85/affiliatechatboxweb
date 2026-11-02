@@ -11,7 +11,6 @@ function buildCsp(isProduction: boolean): string {
           "ws://localhost:*",
           "ws://127.0.0.1:*",
         ]),
-    "https://online-media-tools-server-vercel.vercel.app",
     "https://online-media-tools-server-vercel.onrender.com",
     "https://*.googleapis.com",
     "https://*.firebaseio.com",

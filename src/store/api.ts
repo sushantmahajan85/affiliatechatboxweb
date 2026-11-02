@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { validateFetchArgs } from '@/lib/sanitize-plain-text';
 
 const rawBaseQuery = fetchBaseQuery({
-  baseUrl: getApiBaseUrl('http://localhost:8000'),
+  baseUrl: getApiBaseUrl(),
   prepareHeaders: (headers, { getState }) => {
     const token = (getState() as { auth: { token: string | null } }).auth.token;
     if (token) {

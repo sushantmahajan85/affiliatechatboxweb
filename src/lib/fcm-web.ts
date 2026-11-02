@@ -164,7 +164,7 @@ export async function syncWebFcmTokenToServer(
       return { ok: false, reason: "Firebase returned an empty device token." };
     }
 
-    const base = getApiBaseUrl("http://localhost:8000");
+    const base = getApiBaseUrl();
     const res = await fetch(`${base}/api/auth/${userId}/update_web_fcm_token`, {
       method: "POST",
       headers: {

@@ -1,5 +1,5 @@
 const DEFAULT_PUBLIC_API_URL =
-  "https://online-media-tools-server-vercel.vercel.app";
+  "https://online-media-tools-server-vercel.onrender.com";
 
 export function getApiBaseUrl(fallback = DEFAULT_PUBLIC_API_URL): string {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
