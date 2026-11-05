@@ -2,7 +2,7 @@ import { getApiBaseUrl } from "@/lib/api-base-url";
 import { LINKEDIN_POST_TITLE } from "@/lib/linkedin-post-template";
 import { ImageResponse } from "next/og";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const alt = LINKEDIN_POST_TITLE;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
